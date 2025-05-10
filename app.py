@@ -196,55 +196,119 @@ def plot_skill_gap_chart(user_skills, target_skills):
     plt.savefig("skill_radar_chart.png")
     plt.close()
 
-def get_mock_llm_response(prompt):
+def get_mock_llm_response(prompt_text):
     """Generate mock LLM response for testing without API"""
-    if "risk score" in prompt.lower():
+    prompt_lower = prompt_text.lower()
+    job_title_for_mock = "Software Developer" # 默认职位
+    skills_for_mock = "Python, APIs, Git" # 默认技能
+
+    # 尝试从提示中提取职位名称和技能，以便模拟数据更相关
+    title_match = re.search(r"Matched Job Role:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
+    if title_match:
+        job_title_for_mock = title_match.group(1).strip()
+    
+    skills_match = re.search(r"Key Recommended Skills:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
+    if skills_match:
+        skills_for_mock = skills_match.group(1).strip()
+
+    if "risk score" in prompt_lower and "roadmap" in prompt_lower: # 这是生成路线图和风险评分的提示
         risk_score = random.randint(3, 8)
-        return f"""
-        AI Automation Risk Score: {risk_score}/10
+        
+        # 根据职位关键词调整模拟路线图内容
+        month1_theme, week1_goal, week2_goal, week3_goal, week4_project = "", "", "", "", ""
+        month2_theme, week1_m2, week2_m2, week3_m2, week4_project_m2 = "", "", "", "", ""
+        month3_theme, week1_m3, week2_m3, week3_m3, capstone_project_m3 = "", "", "", "", ""
 
-        3-Month Upskilling Roadmap:
+        if "finance manager" in job_title_for_mock.lower():
+            month1_theme = "Foundational Financial Acumen for Finance Managers"
+            week1_goal = "Understand core financial statements (Balance Sheet, Income Statement, Cash Flow Statements)"
+            week2_goal = "Basics of financial modeling and forecasting in Excel (e.g., 3-statement model basics)"
+            week3_goal = "Key financial ratios and performance metrics analysis"
+            week4_project = "Project: Analyze a public company's annual report and present key financial insights"
+            month2_theme = "Advanced Financial Analysis & Reporting Tools"
+            week1_m2 = "Budgeting processes and variance analysis techniques"
+            week2_m2 = "Introduction to financial planning & analysis (FP&A) software (e.g., Anaplan, Hyperion - conceptual)"
+            week3_m2 = "Cost accounting fundamentals and profitability analysis"
+            week4_project_m2 = "Project: Develop a departmental budget proposal with justifications"
+            month3_theme = "Strategic Finance, Business Partnering, and Leadership"
+            week1_m3 = "Capital budgeting and investment appraisal techniques (NPV, IRR)"
+            week2_m3 = "Communicating financial data effectively to non-financial stakeholders"
+            week3_m3 = "Introduction to risk management and internal controls in finance"
+            capstone_project_m3 = "Capstone: Create a financial strategy presentation for a new business initiative"
+        elif "data scientist" in job_title_for_mock.lower() or "data analyst" in job_title_for_mock.lower():
+            month1_theme = "Python, Statistics, and Data Fundamentals"
+            week1_goal = "Python programming for data analysis (Pandas, NumPy, Matplotlib)"
+            week2_goal = "Descriptive and Inferential Statistics core concepts"
+            week3_goal = "SQL for data extraction and manipulation"
+            week4_project = "Project: Exploratory Data Analysis (EDA) on a real-world dataset"
+            month2_theme = "Machine Learning Foundations"
+            week1_m2 = "Supervised Learning algorithms (Regression, Classification)"
+            week2_m2 = "Unsupervised Learning algorithms (Clustering, Dimensionality Reduction)"
+            week3_m2 = "Model evaluation techniques and feature engineering basics"
+            week4_project_m2 = "Project: Build and evaluate a predictive model for a given problem"
+            month3_theme = "Advanced Topics & Deployment"
+            week1_m3 = "Time Series Analysis or Natural Language Processing (NLP) basics (choose one)"
+            week2_m3 = "Introduction to Big Data technologies (e.g., Spark concept)"
+            week3_m3 = "Communicating data insights and storytelling with data"
+            capstone_project_m3 = "Capstone: End-to-end data science project with a presentation of findings"
+        else: # 默认的通用专业/技术路线图
+            skills_list = [s.strip() for s in skills_for_mock.split(',') if s.strip()]
+            month1_theme = "Foundations in Key Skills"
+            week1_goal = f"Mastering basics of {skills_list[0] if skills_list else 'core skill 1'}"
+            week2_goal = f"Introduction to {skills_list[1] if len(skills_list) > 1 else 'core skill 2'}"
+            week3_goal = f"Practical application of {skills_list[2] if len(skills_list) > 2 else 'core skill 3'} or Version control with Git"
+            week4_project = f"Project: Small project utilizing {skills_list[0] if skills_list else 'core skill 1'}"
+            month2_theme = "Core Skill Application & Integration"
+            week1_m2 = "Deeper dive into a primary skill or tool relevant to the role"
+            week2_m2 = "Understanding how different skills/tools integrate in the role"
+            week3_m2 = "Industry-specific knowledge gathering related to the role"
+            week4_project_m2 = "Project: A more complex project involving multiple learned skills"
+            month3_theme = "Advanced Topics & Role Specialization"
+            week1_m3 = "Exploring advanced concepts or specializations within the role"
+            week2_m3 = "Soft skills development: Communication, teamwork, problem-solving for the role"
+            week3_m3 = "Preparing for interviews and networking in the field"
+            capstone_project_m3 = "Capstone: A portfolio-worthy project simulating real-world tasks for the role"
 
-        Month 1: Foundations
-        - Week 1: Learn basics of Python programming
-        - Week 2: Introduction to data structures and algorithms
-        - Week 3: Git and version control
-        - Week 4: Project: Build a simple automation tool
+        return f"""AI Automation Risk Score: {risk_score}/10
 
-        Month 2: Core Skills
-        - Week 1: Database fundamentals (SQL)
-        - Week 2: Web development basics (HTML, CSS, JavaScript)
-        - Week 3: Introduction to cloud services
-        - Week 4: Project: Deploy a web application
+3-Month Personalized Upskilling Roadmap for {job_title_for_mock}:
 
-        Month 3: Advanced Topics
-        - Week 1: Introduction to machine learning
-        - Week 2: API development and integration
-        - Week 3: Security best practices
-        - Week 4: Final project: Build and deploy a full-stack application
+Month 1: {month1_theme}
+- Week 1: {week1_goal}
+- Week 2: {week2_goal}
+- Week 3: {week3_goal}
+- Week 4: {week4_project}
+
+Month 2: {month2_theme}
+- Week 1: {week1_m2}
+- Week 2: {week2_m2}
+- Week 3: {week3_m2}
+- Week 4: {week4_project_m2}
+
+Month 3: {month3_theme}
+- Week 1: {week1_m3}
+- Week 2: {week2_m3}
+- Week 3: {week3_m3}
+- Week 4: {capstone_project_m3}
+"""
+    elif "job title" in prompt_lower and "skills" in prompt_lower: # 职位提取的模拟响应
+        if "finance manager" in job_title_for_mock.lower():
+             return "Job Title: Finance Manager\nSkills: Financial Analysis, Forecasting, Budgeting, Excel, Financial Modeling, Reporting, Communication"
+        return f"""Job Title: {job_title_for_mock}
+Skills: {skills_for_mock}
+"""
+    elif "improvements" in prompt_lower: # 简历改进的模拟响应
+        return """Resume Improvement Suggestions (Mock):
+        1. Quantify achievements using metrics for the role of {job_title_for_mock}.
+        2. Tailor the skills section to precisely match requirements for {job_title_for_mock}.
+        3. Add a strong summary statement focused on {job_title_for_mock}.
         """
-    elif "job title" in prompt.lower() and "skills" in prompt.lower():
-        return f"""
-        Job Title: Full Stack Developer
-        Skills: JavaScript, React, Node.js, Python, SQL, Cloud Services
-        """
-    elif "improvements" in prompt.lower():
-        return """
-        Resume Improvement Suggestions:
-        1. Add more quantifiable achievements with metrics
-        2. Highlight relevant technical skills more prominently
-        3. Include links to portfolio or GitHub projects
-        4. Use more action verbs in your descriptions
-        5. Tailor your resume more specifically to the target role
-        """
-    else:
-        return """
-        To build a career in this field, focus on these key areas:
-        1. Master the core technical skills
-        2. Build practical projects for your portfolio
-        3. Contribute to open-source projects
-        4. Network with industry professionals
-        5. Stay updated with the latest trends and technologies
+    else: # 通用聊天机器人的模拟响应
+        return f"""Mock Answer for {job_title_for_mock}:
+        To build a career as a {job_title_for_mock}, focus on these key areas:
+        1. Master the core technical skills: {skills_for_mock}.
+        2. Build practical projects for your portfolio.
+        3. Network with industry professionals.
         """
 
 def generate_gemini_content(prompt):
@@ -628,17 +692,49 @@ else:
 
 # --- COMMON ANALYSIS FOR BOTH MODES ---
 prompt = f"""
-You are a career coach. Based on the resume below and the job title, create:
-1. An AI automation risk score (1–10)
-2. A 3-month personalized upskilling roadmap with weekly milestones.
+You are an expert career coach and curriculum designer specializing in creating highly tailored professional development plans.
+Your task is to create a specific and actionable 3-month upskilling roadmap for a candidate aspiring to the "Matched Job Role" by intensely focusing on the "Key Recommended Skills" provided. Additionally, provide an AI automation risk score (1-10) for this role.
 
-Resume:
+**Crucial Instructions for the Roadmap:**
+1.  **Role Specificity:** The roadmap MUST be *directly and exclusively* relevant to the "{job_title}". Avoid generic advice.
+2.  **Skill Integration:** Each weekly milestone must clearly contribute to learning or applying one or more of the "{resilient_skills}". Mention which skill(s) each week's activity targets.
+3.  **Non-Technical Roles:** If "{job_title}" is a non-technical role (e.g., Finance Manager, Marketing Manager, HR Specialist), the roadmap must reflect non-technical skill development, acquisition of industry-specific knowledge, relevant software/tools (e.g., Excel for Finance, Salesforce for Sales), and soft skills pertinent to that role. *Absolutely do NOT provide a software development or generic IT roadmap for non-technical roles.*
+4.  **Technical Roles:** If "{job_title}" is a technical role (e.g., Software Engineer, Data Scientist), focus on relevant programming languages, frameworks, tools, and project-based learning that are standard for that role.
+5.  **Actionable Milestones:** Weekly goals should be specific, measurable, achievable, relevant, and time-bound (SMART) where possible. Instead of "Learn Python", suggest "Complete a Python basics course focusing on data structures and write 3 simple scripts".
+6.  **Consider Resume (Implicitly):** While the resume summary is provided for context on the candidate's background, the roadmap's primary goal is to build proficiency for the "{job_title}" using the "{resilient_skills}".
+
+**Output Format (Strict Adherence Required):**
+
+AI Automation Risk Score: [Score]/10
+
+3-Month Personalized Upskilling Roadmap for {job_title}:
+
+Month 1: [Theme for Month 1 - e.g., "Foundational Financial Acumen & Tools" for a Finance Manager or "Core Python & Data Manipulation" for Data Analyst]
+- Week 1: [Specific, actionable goal related to skills for {job_title}]. (Targets: [Skill1, Skill2])
+- Week 2: [Specific, actionable goal related to skills for {job_title}]. (Targets: [Skill2, Skill3])
+- Week 3: [Specific, actionable goal related to skills for {job_title}]. (Targets: [Skill1, Skill4])
+- Week 4: [Mini-project or practical application relevant to {job_title}]. (Integrates: [Skill1, Skill2, Skill3])
+
+Month 2: [Theme for Month 2 - e.g., "Advanced Analysis & Reporting" for Finance or "Statistical Modeling & Machine Learning Basics" for Data Analyst]
+- Week 1: [Goal]. (Targets: [SkillX])
+- Week 2: [Goal]. (Targets: [SkillY])
+- Week 3: [Goal]. (Targets: [SkillZ])
+- Week 4: [Project]. (Integrates: [SkillX, SkillY, SkillZ])
+
+Month 3: [Theme for Month 3 - e.g., "Strategic Application & Business Partnering" for Finance or "Specialized Techniques & Deployment" for Data Analyst]
+- Week 1: [Goal]. (Targets: [SkillA])
+- Week 2: [Goal]. (Targets: [SkillB])
+- Week 3: [Goal]. (Targets: [SkillC])
+- Week 4: [Capstone project or advanced application for {job_title}, demonstrating overall competency]. (Showcases: All key skills)
+
+--- Context for AI --- 
+Resume Summary (for background understanding of candidate's potential starting point):
 {resume_summary}
 
-Matched Job Role:
+Matched Job Role (The role the roadmap is for):
 {job_title}
 
-Key Recommended Skills:
+Key Recommended Skills (The skills the roadmap must focus on):
 {resilient_skills}
 """
 
