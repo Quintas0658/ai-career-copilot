@@ -104,7 +104,25 @@ def get_openai_embedding(text, model="text-embedding-ada-002"):
             model=model,
             input=text
         )
-        return response.data[0].embedding
+        # 处理可能的不同响应格式
+        if hasattr(response, 'data'):
+            # 标准OpenAI响应
+            return response.data[0].embedding
+        elif isinstance(response, dict) and 'data' in response:
+            # 返回的是字典
+            return response['data'][0]['embedding']
+        elif isinstance(response, str):
+            # 如果是字符串，可能是JSON字符串
+            import json
+            try:
+                data = json.loads(response)
+                return data['data'][0]['embedding']
+            except:
+                st.error("Unable to parse OpenAI response as JSON")
+                return get_mock_embedding()
+        else:
+            st.error(f"Unexpected OpenAI response format: {type(response)}")
+            return get_mock_embedding()
     except Exception as e:
         st.error(f"OpenAI Embedding error: {str(e)}")
         return get_mock_embedding()
@@ -252,7 +270,26 @@ def generate_openai_content(prompt):
             temperature=temperature,
             max_tokens=max_tokens
         )
-        return response.choices[0].message.content
+        
+        # 处理可能的不同响应格式
+        if hasattr(response, 'choices'):
+            # 标准OpenAI响应
+            return response.choices[0].message.content
+        elif isinstance(response, dict) and 'choices' in response:
+            # 返回的是字典
+            return response['choices'][0]['message']['content']
+        elif isinstance(response, str):
+            # 如果是字符串，可能是JSON字符串
+            import json
+            try:
+                data = json.loads(response)
+                return data['choices'][0]['message']['content']
+            except:
+                st.error("Unable to parse OpenAI response as JSON")
+                return get_mock_llm_response(prompt)
+        else:
+            st.error(f"Unexpected OpenAI response format: {type(response)}")
+            return get_mock_llm_response(prompt)
     except Exception as e:
         st.error(f"OpenAI content generation error: {str(e)}")
         return get_mock_llm_response(prompt)
