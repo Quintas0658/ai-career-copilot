@@ -413,10 +413,11 @@ def generate_content(prompt):
     else:
         return generate_openai_content(prompt)
 
-def extract_job_info_with_llm(job_description):
+def extract_job_info_with_llm(job_description, force_direct_parsing_flag):
     try:
         if debug_mode:
             st.write("--- Debug: Entering extract_job_info_with_llm ---")
+            st.write(f"force_direct_parsing_flag: {force_direct_parsing_flag}") # Log the passed flag
             st.write("Job Description (first 300 chars):", job_description[:300] + "...")
 
         description_lower = job_description.lower()
@@ -470,10 +471,11 @@ def extract_job_info_with_llm(job_description):
                             extracted_skills_list = ["Communication", "Problem Solving", "Teamwork", "Organization", "Adaptability"]
                         break
         
-        if debug_mode and force_direct_parsing:
+        if debug_mode and force_direct_parsing_flag:
              st.warning("Force direct parsing is ON. Skipping LLM call for job info extraction.")
         
-        if (force_direct_parsing and extracted_title) or (extracted_title and extracted_skills_list and not force_direct_parsing and api_choice == "OpenAI"): 
+        if (force_direct_parsing_flag and extracted_title) or \
+           (extracted_title and extracted_skills_list and not force_direct_parsing_flag and api_choice == "OpenAI"): 
             if debug_mode:
                 st.success(f"Using directly parsed/keyword-matched job info. Title: {extracted_title}, Skills: {extracted_skills_list}")
             return {
@@ -481,12 +483,11 @@ def extract_job_info_with_llm(job_description):
                 "resilient_skills": ", ".join(extracted_skills_list)
             }
 
-        if not extracted_title or not extracted_skills_list or api_choice == "Google Gemini": 
+        if not extracted_title or not extracted_skills_list or (api_choice == "Google Gemini" and not force_direct_parsing_flag): 
             if debug_mode and (not extracted_title or not extracted_skills_list):
                 st.info("Direct parsing failed or incomplete. Attempting LLM extraction...")
             elif debug_mode:
-                 st.info("Proceeding with Gemini LLM extraction...")
-
+                 st.info("Proceeding with Gemini LLM extraction (or LLM if not forcing direct parse)...")
             prompt_llm = f"""
             Extract the EXACT job title and key skills from the job description below.
             Pay close attention to the actual job title mentioned in the description, not just keywords.
@@ -651,7 +652,8 @@ else:
         for i, job_desc in enumerate(job_list):
             with st.spinner(f"Processing job {i+1}/{len(job_list)}..."):
                 try:
-                    job_info = extract_job_info_with_llm(job_desc)
+                    # Pass the force_direct_parsing flag here
+                    job_info = extract_job_info_with_llm(job_desc, force_direct_parsing)
                     job_info["job_embedding"] = get_text_embedding(job_desc)
                     job_info["similarity"] = cosine_similarity(resume_embedding, job_info["job_embedding"])
                     custom_jobs.append(job_info)
