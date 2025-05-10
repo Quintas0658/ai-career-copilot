@@ -52,6 +52,15 @@ uploaded_file = st.sidebar.file_uploader("📁 Upload Resume", type=["pdf"])
 # 添加模拟模式
 use_mock_data = st.sidebar.checkbox("Use Mock Data (No API calls)", value=False)
 
+# 确保 force_direct_parsing 总是有定义
+if debug_mode:
+    st.sidebar.markdown("### Advanced Options")
+    force_direct_parsing = st.sidebar.checkbox("Force direct text parsing (no API)", value=False)
+    if force_direct_parsing:
+        st.sidebar.info("Using direct text analysis instead of AI APIs")
+else:
+    force_direct_parsing = False # Default value when debug_mode is off
+
 # --- API CONFIG ---
 try:
     if api_choice == "Google Gemini" and not use_mock_data:
@@ -652,14 +661,22 @@ else:
         for i, job_desc in enumerate(job_list):
             with st.spinner(f"Processing job {i+1}/{len(job_list)}..."):
                 try:
-                    # Pass the force_direct_parsing flag here
+                    # Ensure force_direct_parsing is correctly passed
                     job_info = extract_job_info_with_llm(job_desc, force_direct_parsing)
-                    job_info["job_embedding"] = get_text_embedding(job_desc)
+                    job_info["job_embedding"] = get_text_embedding(job_desc) 
                     job_info["similarity"] = cosine_similarity(resume_embedding, job_info["job_embedding"])
                     custom_jobs.append(job_info)
                     progress_bar.progress((i + 1) / len(job_list))
                 except Exception as e:
-                    st.error(f"Error processing job {i+1}: {str(e)}")
+                    # Display the actual error to help debug further if needed
+                    st.error(f"Error processing job {i+1} ('{job_desc[:50]}...'): {str(e)}")
+                    # Add a placeholder or skip this job to avoid crashing the whole loop
+                    custom_jobs.append({
+                        "job_title": f"Error in Job {i+1}", 
+                        "resilient_skills": "Error", 
+                        "job_embedding": get_mock_embedding(), # Use mock to prevent further errors
+                        "similarity": 0
+                    })
         
         progress_bar.empty()
         
@@ -867,10 +884,3 @@ if user_query:
         st.markdown(f"<div style='background-color:#1e1e1e;padding:10px;border-radius:10px'><b>💡 Career Bot:</b> {tutor_response}</div>", unsafe_allow_html=True)
     except Exception as e:
         st.error(f"Error getting career advice: {str(e)}")
-
-# 添加一个开关，可以强制使用直接文本解析而不是API
-if debug_mode:
-    st.sidebar.markdown("### Advanced Options")
-    force_direct_parsing = st.sidebar.checkbox("Force direct text parsing (no API)", value=False)
-    if force_direct_parsing:
-        st.sidebar.info("Using direct text analysis instead of AI APIs")
