@@ -199,27 +199,30 @@ def plot_skill_gap_chart(user_skills, target_skills):
 def get_mock_llm_response(prompt_text):
     """Generate mock LLM response for testing without API"""
     prompt_lower = prompt_text.lower()
-    job_title_for_mock = "Software Developer" # 默认职位
-    skills_for_mock = "Python, APIs, Git" # 默认技能
+    job_title_for_mock = "General Professional" # 更中性的默认职位
+    skills_for_mock = "Communication, Organization, Problem Solving, MS Office Suite" # 更中性的默认技能
 
     # 尝试从提示中提取职位名称和技能，以便模拟数据更相关
-    title_match = re.search(r"Matched Job Role:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
+    # 修正正则表达式以匹配括号中的可选文本
+    title_match = re.search(r"Matched Job Role(?:\s*\(.*?\))?:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
     if title_match:
         job_title_for_mock = title_match.group(1).strip()
     
-    skills_match = re.search(r"Key Recommended Skills:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
+    skills_match = re.search(r"Key Recommended Skills(?:\s*\(.*?\))?:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
     if skills_match:
         skills_for_mock = skills_match.group(1).strip()
 
     if "risk score" in prompt_lower and "roadmap" in prompt_lower: # 这是生成路线图和风险评分的提示
-        risk_score = random.randint(3, 8)
+        risk_score = random.randint(2, 6) # 协调员岗位的风险通常不会太高
         
-        # 根据职位关键词调整模拟路线图内容
         month1_theme, week1_goal, week2_goal, week3_goal, week4_project = "", "", "", "", ""
         month2_theme, week1_m2, week2_m2, week3_m2, week4_project_m2 = "", "", "", "", ""
         month3_theme, week1_m3, week2_m3, week3_m3, capstone_project_m3 = "", "", "", "", ""
 
-        if "finance manager" in job_title_for_mock.lower():
+        # 根据职位关键词调整模拟路线图内容
+        job_title_lower = job_title_for_mock.lower()
+
+        if "finance manager" in job_title_lower:
             month1_theme = "Foundational Financial Acumen for Finance Managers"
             week1_goal = "Understand core financial statements (Balance Sheet, Income Statement, Cash Flow Statements)"
             week2_goal = "Basics of financial modeling and forecasting in Excel (e.g., 3-statement model basics)"
@@ -235,7 +238,7 @@ def get_mock_llm_response(prompt_text):
             week2_m3 = "Communicating financial data effectively to non-financial stakeholders"
             week3_m3 = "Introduction to risk management and internal controls in finance"
             capstone_project_m3 = "Capstone: Create a financial strategy presentation for a new business initiative"
-        elif "data scientist" in job_title_for_mock.lower() or "data analyst" in job_title_for_mock.lower():
+        elif "data scientist" in job_title_lower or "data analyst" in job_title_lower:
             month1_theme = "Python, Statistics, and Data Fundamentals"
             week1_goal = "Python programming for data analysis (Pandas, NumPy, Matplotlib)"
             week2_goal = "Descriptive and Inferential Statistics core concepts"
@@ -251,23 +254,41 @@ def get_mock_llm_response(prompt_text):
             week2_m3 = "Introduction to Big Data technologies (e.g., Spark concept)"
             week3_m3 = "Communicating data insights and storytelling with data"
             capstone_project_m3 = "Capstone: End-to-end data science project with a presentation of findings"
-        else: # 默认的通用专业/技术路线图
+        elif "recruiting coordinator" in job_title_lower or "hr coordinator" in job_title_lower or \
+             ("coordinator" in job_title_lower and ("recruiting" in job_title_lower or "hr" in job_title_lower or "talent" in job_title_lower)) or \
+             "talent acquisition coordinator" in job_title_lower or "human resources coordinator" in job_title_lower:
+            month1_theme = "Recruiting Fundamentals & Tools Mastery"
+            week1_goal = "Understanding the end-to-end recruitment lifecycle and RC role within it. Basics of Applicant Tracking Systems (ATS)."
+            week2_goal = "Mastering scheduling tools (Outlook Calendar, Google Calendar) for complex interview arrangements."
+            week3_goal = "Professional communication for candidate correspondence (email templates, phone etiquette). Basics of MS Excel/Google Sheets for tracking."
+            week4_project = "Project: Create a mock interview schedule for 3 candidates, 5 interviewers with varying availability, and draft all candidate communication."
+            month2_theme = "Candidate Experience & Process Efficiency"
+            week1_m2 = "Techniques for improving candidate experience at each touchpoint. Handling scheduling conflicts gracefully."
+            week2_m2 = "Introduction to data integrity in ATS and importance of accurate record keeping. Generating basic recruitment reports."
+            week3_m2 = "Understanding job descriptions and basic screening criteria. Coordinating post-interview debrief logistics."
+            week4_project_m2 = "Project: Design a checklist for ensuring a positive candidate experience for a virtual interview process."
+            month3_theme = "Advanced Coordination & HR Acumen"
+            week1_m3 = "Handling confidential information and understanding basic HR compliance relevant to recruiting."
+            week2_m3 = "Time management and prioritization for handling multiple requisitions. Basics of SharePoint or similar for document management."
+            week3_m3 = "Problem-solving common recruiting challenges (e.g., last-minute cancellations, unresponsive candidates/managers)."
+            capstone_project_m3 = "Capstone: Develop a proposal to improve scheduling efficiency or candidate experience by 10% for the RC team, with actionable steps."
+        else: # 默认的通用专业/行政路线图
             skills_list = [s.strip() for s in skills_for_mock.split(',') if s.strip()]
-            month1_theme = "Foundations in Key Skills"
-            week1_goal = f"Mastering basics of {skills_list[0] if skills_list else 'core skill 1'}"
-            week2_goal = f"Introduction to {skills_list[1] if len(skills_list) > 1 else 'core skill 2'}"
-            week3_goal = f"Practical application of {skills_list[2] if len(skills_list) > 2 else 'core skill 3'} or Version control with Git"
-            week4_project = f"Project: Small project utilizing {skills_list[0] if skills_list else 'core skill 1'}"
-            month2_theme = "Core Skill Application & Integration"
-            week1_m2 = "Deeper dive into a primary skill or tool relevant to the role"
-            week2_m2 = "Understanding how different skills/tools integrate in the role"
-            week3_m2 = "Industry-specific knowledge gathering related to the role"
-            week4_project_m2 = "Project: A more complex project involving multiple learned skills"
-            month3_theme = "Advanced Topics & Role Specialization"
-            week1_m3 = "Exploring advanced concepts or specializations within the role"
-            week2_m3 = "Soft skills development: Communication, teamwork, problem-solving for the role"
-            week3_m3 = "Preparing for interviews and networking in the field"
-            capstone_project_m3 = "Capstone: A portfolio-worthy project simulating real-world tasks for the role"
+            month1_theme = "Foundations in Core Professional Skills"
+            week1_goal = f"Effective Communication: Written and verbal. (Focus: {skills_list[0] if skills_list else 'Communication'})"
+            week2_goal = f"Organizational Skills & Time Management. (Focus: {skills_list[1] if len(skills_list) > 1 else 'Organization'})"
+            week3_goal = f"Proficiency in MS Office Suite (Word, Excel, Outlook/PowerPoint) or Google Workspace. (Focus: {skills_list[3] if len(skills_list) > 3 else 'Office Tools'})"
+            week4_project = "Project: Organize a mock event/meeting including scheduling, communication, and document preparation."
+            month2_theme = "Problem Solving & Process Improvement"
+            week1_m2 = "Analytical thinking and problem-solving techniques. (Focus: Problem Solving)"
+            week2_m2 = "Introduction to process mapping and identifying areas for efficiency."
+            week3_m2 = f"Teamwork and collaboration skills. (Focus: {skills_list[2] if len(skills_list) > 2 else 'Teamwork'})"
+            week4_project_m2 = "Project: Identify a common administrative bottleneck and propose a simple solution."
+            month3_theme = "Advanced Professional Development"
+            week1_m3 = "Developing industry-specific knowledge relevant to the company/role."
+            week2_m3 = "Customer service orientation and stakeholder management."
+            week3_m3 = "Presentation skills and professional networking basics."
+            capstone_project_m3 = "Capstone: Create a professional development plan for yourself targeting a specific career goal within the organization."
 
         return f"""AI Automation Risk Score: {risk_score}/10
 
@@ -292,8 +313,11 @@ Month 3: {month3_theme}
 - Week 4: {capstone_project_m3}
 """
     elif "job title" in prompt_lower and "skills" in prompt_lower: # 职位提取的模拟响应
-        if "finance manager" in job_title_for_mock.lower():
+        job_title_lower = job_title_for_mock.lower()
+        if "finance manager" in job_title_lower:
              return "Job Title: Finance Manager\nSkills: Financial Analysis, Forecasting, Budgeting, Excel, Financial Modeling, Reporting, Communication"
+        elif "recruiting coordinator" in job_title_lower or ("coordinator" in job_title_lower and "recruiting" in job_title_lower) :
+             return "Job Title: Recruiting Coordinator\nSkills: Scheduling, Communication, ATS, Organization, MS Outlook, MS Excel, Candidate Experience, Time Management"
         return f"""Job Title: {job_title_for_mock}
 Skills: {skills_for_mock}
 """
