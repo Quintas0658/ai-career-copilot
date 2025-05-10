@@ -415,149 +415,147 @@ def generate_content(prompt):
 
 def extract_job_info_with_llm(job_description):
     try:
-        st.info("Extracting job information...")
-        
-        # 直接解析职位名称 - 尝试从文本中找到明确的职位名称
-        description_lower = job_description.lower()
-        direct_title_match = None
-        
-        # 查找常见职位模式
-        title_patterns = [
-            r'seeking a(?:n)? ([^\.]+?) to', 
-            r'hiring a(?:n)? ([^\.]+?) to',
-            r'is (?:looking|searching) for a(?:n)? ([^\.]+?) to',
-            r'job title:?\s*([^\.]+)',
-            r'role:?\s*([^\.]+?) ',
-            r'position:?\s*([^\.]+)'
-        ]
-        
-        for pattern in title_patterns:
-            match = re.search(pattern, description_lower, re.IGNORECASE)
-            if match:
-                potential_title = match.group(1).strip()
-                # 清理标题
-                if len(potential_title.split()) <= 5:  # 标题通常不会超过5个词
-                    direct_title_match = potential_title
-                    break
-        
-        # 直接检查关键职位词
-        if not direct_title_match:
-            if "finance manager" in description_lower:
-                direct_title_match = "Finance Manager"
-            elif "data scientist" in description_lower:
-                direct_title_match = "Data Scientist"
-            elif "software engineer" in description_lower:
-                direct_title_match = "Software Engineer"
-            # 添加更多关键职位词匹配
-        
-        # 如果能够直接找到职位名称，使用它
-        if direct_title_match:
-            if debug_mode:
-                st.success(f"Direct match found: {direct_title_match}")
-            
-            # 根据职位确定技能
-            skills = []
-            if "finance" in direct_title_match.lower():
-                skills = ["Financial Analysis", "Forecasting", "Budgeting", "Data Analysis", 
-                         "Excel", "Financial Reporting", "Business Acumen", "Strategic Planning"]
-            elif "data" in direct_title_match.lower():
-                skills = ["Python", "SQL", "Data Analysis", "Machine Learning", 
-                         "Statistics", "Data Visualization", "Big Data", "R"]
-            elif "engineer" in direct_title_match.lower() or "developer" in direct_title_match.lower():
-                skills = ["Programming", "Software Development", "Problem Solving", 
-                         "Git", "CI/CD", "Testing", "API Design", "Algorithms"]
-            else:
-                # 提取描述中提到的技能
-                common_skills = [
-                    "Communication", "Leadership", "Project Management", 
-                    "SQL", "Python", "Analysis", "Excel", "Financial", "Strategic", 
-                    "Planning", "Reporting", "Management", "Data"
-                ]
-                skills = [skill for skill in common_skills if skill.lower() in description_lower]
-                # 确保至少有一些基本技能
-                if len(skills) < 5:
-                    skills.extend(["Communication", "Problem Solving", "Analytical Skills", 
-                                 "Critical Thinking", "Teamwork"][:5-len(skills)])
-            
-            return {
-                "job_title": direct_title_match.title(),  # 确保标题格式正确
-                "resilient_skills": ", ".join(skills)
-            }
-            
-        # 如果无法直接找到，再尝试使用LLM
-        # 改进提示词，使其更明确地指导如何提取信息
-        prompt = f"""
-        Extract the EXACT job title and key skills from the job description below.
-        Pay close attention to the actual job title mentioned in the description, not just keywords.
-        For financial, management, or non-technical roles, be sure to identify them correctly.
-        
-        Format your response EXACTLY as follows:
-        Job Title: [extracted job title, e.g. Finance Manager, Software Engineer, etc.]
-        Skills: [comma-separated list of 5-8 key skills required for this role]
+        if debug_mode:
+            st.write("--- Debug: Entering extract_job_info_with_llm ---")
+            st.write("Job Description (first 300 chars):", job_description[:300] + "...")
 
-        Job Description:
-        {job_description}
-        """
+        description_lower = job_description.lower()
+        extracted_title = None
+        extracted_skills_list = []
+
+        role_patterns = [
+            ("recruiting coordinator", "Recruiting Coordinator", ["Scheduling", "Communication", "ATS", "Organization", "MS Outlook", "MS Excel", "Candidate Experience", "Time Management"]),
+            (("hr coordinator", "human resources coordinator"), "Human Resources Coordinator", ["HR Administration", "Onboarding", "Employee Records", "Communication", "ATS", "MS Office", "Scheduling", "Problem Solving"]),
+            ("talent acquisition coordinator", "Talent Acquisition Coordinator", ["Sourcing Support", "Candidate Engagement", "ATS Management", "Scheduling", "Reporting", "Communication", "Organization"]),
+            (("finance manager", "financial manager"), "Finance Manager", ["Financial Analysis", "Forecasting", "Budgeting", "Excel", "Financial Modeling", "Reporting", "Communication", "Business Acumen"]),
+            (("data scientist",), "Data Scientist", ["Python", "R", "Machine Learning", "SQL", "Statistics", "Data Visualization", "Big Data", "Predictive Modeling"]),
+            (("data analyst",), "Data Analyst", ["SQL", "Excel", "Tableau", "Power BI", "Data Cleaning", "Data Visualization", "Statistics", "Communication"]),
+            (("software engineer", "software developer"), "Software Engineer", ["Python", "Java", "JavaScript", "Git", "SQL", "APIs", "Problem Solving", "Data Structures"])
+        ]
+
+        for keywords, title, skills in role_patterns:
+            if isinstance(keywords, tuple):
+                if any(kw in description_lower for kw in keywords):
+                    extracted_title = title
+                    extracted_skills_list = skills
+                    break
+            elif keywords in description_lower:
+                extracted_title = title
+                extracted_skills_list = skills
+                break
         
-        # 在界面上显示原始描述的开头(用于调试)
-        if debug_mode:
-            st.write("Description excerpt:", job_description[:200] + "...")
+        if debug_mode and extracted_title:
+            st.success(f"Direct keyword match successful. Title: {extracted_title}, Skills: {extracted_skills_list}")
+
+        if not extracted_title:
+            generic_title_patterns = [
+                r'seeking a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
+                r'hiring a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
+                r'is (?:looking|searching) for a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
+                r'job title:?\s*([\w\s(]+?)(?:\n|,|\[)',
+                r'role:?\s*([\w\s(]+?)(?:\n|,|\[)', 
+                r'position:?\s*([\w\s(]+?)(?:\n|,|\[)'
+            ]
+            for pattern in generic_title_patterns:
+                match = re.search(pattern, description_lower, re.IGNORECASE)
+                if match:
+                    potential_title = match.group(1).strip()
+                    potential_title = re.sub(r'\s*\(.*?\)$' ,'', potential_title).strip()
+                    potential_title = re.sub(r'\s+(to|with|for|as a|who|responsible for)$' ,'', potential_title, flags=re.IGNORECASE).strip()
+                    if 2 < len(potential_title.split()) < 6 and len(potential_title) < 50:
+                        extracted_title = potential_title.title()
+                        if debug_mode:
+                            st.info(f"Regex pattern matched. Potential Title: {extracted_title}")
+                        if not extracted_skills_list:
+                            extracted_skills_list = ["Communication", "Problem Solving", "Teamwork", "Organization", "Adaptability"]
+                        break
         
-        response = generate_content(prompt)
+        if debug_mode and force_direct_parsing:
+             st.warning("Force direct parsing is ON. Skipping LLM call for job info extraction.")
         
-        # 调试输出
-        if debug_mode:
-            st.write("Raw API response:", response)
-        
-        st.success("Successfully extracted job information")
-        
-        # 提高正则表达式的鲁棒性
-        job_title_match = re.search(r"Job Title:\s*(.*?)(?:\n|$)", response, re.IGNORECASE)
-        skills_match = re.search(r"Skills:\s*(.*?)(?:\n|$)", response, re.IGNORECASE)
-        
-        job_title = job_title_match.group(1).strip() if job_title_match else "Unknown Position"
-        skills_text = skills_match.group(1).strip() if skills_match else ""
-        skills = [skill.strip() for skill in skills_text.split(",") if skill.strip()]
-        
-        # 确保至少有一些技能
-        if not skills:
-            if "finance" in job_description.lower() or "financial" in job_description.lower():
-                skills = ["Financial Analysis", "Forecasting", "Budgeting", "Data Analysis", "Excel"]
-            elif "manager" in job_description.lower() or "management" in job_description.lower():
-                skills = ["Leadership", "Strategic Planning", "Team Management", "Communication", "Project Management"]
+        if (force_direct_parsing and extracted_title) or (extracted_title and extracted_skills_list and not force_direct_parsing and api_choice == "OpenAI"): 
+            if debug_mode:
+                st.success(f"Using directly parsed/keyword-matched job info. Title: {extracted_title}, Skills: {extracted_skills_list}")
+            return {
+                "job_title": extracted_title,
+                "resilient_skills": ", ".join(extracted_skills_list)
+            }
+
+        if not extracted_title or not extracted_skills_list or api_choice == "Google Gemini": 
+            if debug_mode and (not extracted_title or not extracted_skills_list):
+                st.info("Direct parsing failed or incomplete. Attempting LLM extraction...")
+            elif debug_mode:
+                 st.info("Proceeding with Gemini LLM extraction...")
+
+            prompt_llm = f"""
+            Extract the EXACT job title and key skills from the job description below.
+            Pay close attention to the actual job title mentioned in the description, not just keywords.
+            For financial, management, or non-technical roles, be sure to identify them correctly.
+            
+            Format your response EXACTLY as follows:
+            Job Title: [extracted job title, e.g. Finance Manager, Recruiting Coordinator, Software Engineer, etc.]
+            Skills: [comma-separated list of 5-8 key skills required for this role. For 'Recruiting Coordinator', skills should include Scheduling, Communication, ATS, Organization, MS Outlook, MS Excel, Candidate Experience, Time Management.]
+
+            Job Description:
+            {job_description}
+            """
+            
+            if debug_mode:
+                st.write("LLM Prompt for job info extraction:", prompt_llm)
+            
+            response_llm = generate_content(prompt_llm)
+            
+            if debug_mode:
+                st.write("Raw LLM response for job info:", response_llm)
+            
+            job_title_match_llm = re.search(r"Job Title:\s*(.*?)(?:\n|$)", response_llm, re.IGNORECASE)
+            skills_match_llm = re.search(r"Skills:\s*(.*?)(?:\n|$)", response_llm, re.IGNORECASE)
+            
+            llm_job_title = job_title_match_llm.group(1).strip() if job_title_match_llm else None
+            llm_skills_text = skills_match_llm.group(1).strip() if skills_match_llm else None
+            
+            if llm_job_title and llm_skills_text:
+                extracted_title = llm_job_title
+                extracted_skills_list = [s.strip() for s in llm_skills_text.split(",") if s.strip()]
+                if debug_mode:
+                    st.success(f"LLM extraction successful. Title: {extracted_title}, Skills: {extracted_skills_list}")
+            elif debug_mode:
+                st.warning("LLM extraction failed to parse title/skills. Will use fallback.")
+
+        if not extracted_title:
+            extracted_title = "General Role"
+            if debug_mode:
+                st.warning("All extraction methods failed for title. Using 'General Role'.")
+        if not extracted_skills_list:
+            description_lower = job_description.lower()
+            if "finance" in description_lower or "financial" in description_lower:
+                extracted_skills_list = ["Financial Analysis", "Forecasting", "Budgeting", "Data Analysis", "Excel"]
+            elif "recruiting" in description_lower or "hr" in description_lower or "human resources" in description_lower:
+                 extracted_skills_list = ["Scheduling", "Communication", "ATS", "Organization", "MS Office", "Candidate Support"]
+            elif "manager" in description_lower or "management" in description_lower:
+                extracted_skills_list = ["Leadership", "Strategic Planning", "Team Management", "Communication", "Project Management"]
             else:
-                skills = ["Communication", "Problem Solving", "Analytical Skills", "Attention to Detail", "Teamwork"]
-        
-        # 创建结果字典
-        result = {
-            "job_title": job_title,
-            "resilient_skills": ", ".join(skills)
+                extracted_skills_list = ["Communication", "Problem Solving", "Analytical Skills", "Attention to Detail", "Teamwork"]
+            if debug_mode:
+                st.warning(f"Using fallback skills for '{extracted_title}': {extracted_skills_list}")
+
+        final_result = {
+            "job_title": extracted_title,
+            "resilient_skills": ", ".join(extracted_skills_list)
         }
         
-        # 调试输出最终结果
         if debug_mode:
-            st.write("Extracted job info:", result)
+            st.write("--- Debug: Exiting extract_job_info_with_llm ---")
+            st.json(final_result)
             
-        return result
+        return final_result
+
     except Exception as e:
-        st.error(f"Error extracting job info: {str(e)}")
-        # 根据职位描述关键词返回更合理的默认职位
-        description_lower = job_description.lower()
-        if "finance" in description_lower or "financial" in description_lower:
-            return {
-                "job_title": "Finance Manager",
-                "resilient_skills": "Financial Analysis, Forecasting, Budgeting, Data Analysis, Excel"
-            }
-        elif "manager" in description_lower or "management" in description_lower:
-            return {
-                "job_title": "Business Manager",
-                "resilient_skills": "Leadership, Strategic Planning, Team Management, Communication, Project Management"
-            }
-        else:
-            return {
-                "job_title": "Unknown Position",
-                "resilient_skills": "Communication, Problem Solving, Analytical Skills, Attention to Detail, Teamwork"
-            }
+        st.error(f"Critical error in extract_job_info_with_llm: {str(e)}")
+        return {
+            "job_title": "Error Processing Job",
+            "resilient_skills": "Error, Issue, Problem"
+        }
 
 # --- SAMPLE JOB DATA ---
 df_jobs = pd.DataFrame([
@@ -774,13 +772,31 @@ except Exception as e:
 risk_match = re.search(r"risk score.*?(\d{1,2})", roadmap_output, re.IGNORECASE)
 risk_score = risk_match.group(1) if risk_match else "N/A"
 
+if debug_mode:
+    st.write("--- Debug: Data for Radar Chart --- ")
+    st.write(f"Job Title for Analysis: {job_title}")
+    st.write(f"Resilient Skills String (to become target_skills): {resilient_skills}")
+
 known_skills = [
     "Python", "Java", "C++", "JavaScript", "SQL", "Git", "Linux", "Networking", "Bash",
     "Tableau", "Excel", "Power BI", "Burp Suite", "Nmap", "Wireshark", "Prompt Engineering",
-    "APIs", "Cloud", "Docker", "Kubernetes", "Ethical Hacking"
+    "APIs", "Cloud", "Docker", "Kubernetes", "Ethical Hacking", 
+    "Communication", "Management", "Financial Analysis", "Reporting", "Data Analysis", 
+    "Project Management", "Problem Solving", "Organization", "Scheduling", "ATS", 
+    "Candidate Experience", "Time Management", "HR Administration", "Onboarding", "Employee Records",
+    "Sourcing Support", "Candidate Engagement", "ATS Management", 
+    "Forecasting", "Budgeting", "Financial Modeling", "Business Acumen", 
+    "R", "Machine Learning", "Statistics", "Data Visualization", "Big Data", "Predictive Modeling",
+    "Data Cleaning", "Teamwork", "Adaptability"
 ]
 user_skills = [skill for skill in known_skills if skill.lower() in resume_text.lower()]
-target_skills = [s.strip() for s in resilient_skills.split(",")]
+target_skills = [s.strip() for s in resilient_skills.split(",") if s.strip()]
+
+if debug_mode:
+    st.write(f"User Skills (from resume & known_skills): {user_skills}")
+    st.write(f"Target Skills (parsed from resilient_skills): {target_skills}")
+    st.write("--- End Debug --- ")
+
 try:
     plot_skill_gap_chart(user_skills, target_skills)
 except Exception as e:
