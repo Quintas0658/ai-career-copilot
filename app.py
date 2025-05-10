@@ -6,6 +6,8 @@ import pandas as pd
 import re
 from fpdf import FPDF
 import matplotlib.pyplot as plt
+import openai
+import random
 
 # --- CONFIG ---
 st.set_page_config(page_title="AI Career Copilot", layout="wide")
@@ -14,30 +16,73 @@ st.markdown("Welcome to your personalized AI career assistant. Upload your resum
 
 # --- SIDEBAR ---
 st.sidebar.title("⚙️ Config")
-model_name = st.sidebar.selectbox("Gemini Model", [
-    "models/gemini-1.5-pro", "models/gemini-1.5-flash", "models/chat-bison-001"
-])
+
+# API选择
+api_choice = st.sidebar.radio(
+    "AI Provider:",
+    ["Google Gemini", "OpenAI"]
+)
+
+# Gemini配置
+if api_choice == "Google Gemini":
+    model_name = st.sidebar.selectbox("Gemini Model", [
+        "models/gemini-1.5-pro", "models/gemini-1.5-flash", "models/chat-bison-001"
+    ])
+    
+# OpenAI配置
+else:
+    model_name = st.sidebar.selectbox("OpenAI Model", [
+        "gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"
+    ])
+    custom_base_url = st.sidebar.text_input(
+        "OpenAI API Base URL (Optional)",
+        value="https://api.openai-up.com",
+        help="Override the default OpenAI API URL (https://api.openai.com)"
+    )
+
 temperature = st.sidebar.slider("Creativity (temperature)", 0.0, 1.0, 0.7)
 max_tokens = st.sidebar.slider("Max Output Tokens", 100, 2048, 800)
 language = st.sidebar.selectbox("🌐 Language", ["English", "Hindi", "Spanish", "French"])
 
 uploaded_file = st.sidebar.file_uploader("📁 Upload Resume", type=["pdf"])
 
-# --- GEMINI CONFIG ---
+# 添加模拟模式
+use_mock_data = st.sidebar.checkbox("Use Mock Data (No API calls)", value=False)
+
+# --- API CONFIG ---
 try:
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=GOOGLE_API_KEY)
-    st.sidebar.success("✅ API key configured")
+    if api_choice == "Google Gemini" and not use_mock_data:
+        GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+        genai.configure(api_key=GOOGLE_API_KEY)
+        st.sidebar.success("✅ Gemini API key configured")
+    elif api_choice == "OpenAI" and not use_mock_data:
+        OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+        if custom_base_url:
+            openai.base_url = custom_base_url
+        openai.api_key = OPENAI_API_KEY
+        st.sidebar.success("✅ OpenAI API key configured")
+    elif use_mock_data:
+        st.sidebar.success("✅ Using mock data mode (no API calls)")
 except Exception as e:
-    st.sidebar.error(f"⚠️ API key error: {str(e)}")
-    st.stop()
+    if not use_mock_data:
+        st.sidebar.error(f"⚠️ API key error: {str(e)}")
+        st.sidebar.warning("Enabling mock data mode")
+        use_mock_data = True
 
 # --- FUNCTIONS ---
 def extract_text_from_resume(uploaded_file):
     with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
         return "".join([page.get_text() for page in doc])
 
+def get_mock_embedding():
+    """Generate mock embedding for testing without API"""
+    return [random.uniform(-1, 1) for _ in range(768)]
+
 def get_gemini_embedding(text, model="models/embedding-001"):
+    """Get embedding using Gemini API"""
+    if use_mock_data:
+        return get_mock_embedding()
+    
     try:
         response = genai.embed_content(
             model=model,
@@ -46,14 +91,39 @@ def get_gemini_embedding(text, model="models/embedding-001"):
         )
         return response["embedding"]
     except Exception as e:
-        st.error(f"Embedding error: {str(e)}")
-        # Return a dummy embedding in case of error
-        return [0.0] * 768
+        st.error(f"Gemini Embedding error: {str(e)}")
+        return get_mock_embedding()
+
+def get_openai_embedding(text, model="text-embedding-ada-002"):
+    """Get embedding using OpenAI API"""
+    if use_mock_data:
+        return get_mock_embedding()
+    
+    try:
+        response = openai.embeddings.create(
+            model=model,
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        st.error(f"OpenAI Embedding error: {str(e)}")
+        return get_mock_embedding()
+
+def get_text_embedding(text):
+    """Get embedding based on selected API"""
+    if api_choice == "Google Gemini":
+        return get_gemini_embedding(text)
+    else:
+        return get_openai_embedding(text)
 
 def cosine_similarity(a, b):
     a = np.array(a)
     b = np.array(b)
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    # Prevent division by zero
+    norm_product = np.linalg.norm(a) * np.linalg.norm(b)
+    if norm_product == 0:
+        return 0
+    return np.dot(a, b) / norm_product
 
 def generate_pdf_report(name, role, skills, score, roadmap):
     pdf = FPDF()
@@ -97,9 +167,106 @@ def plot_skill_gap_chart(user_skills, target_skills):
     plt.savefig("skill_radar_chart.png")
     plt.close()
 
+def get_mock_llm_response(prompt):
+    """Generate mock LLM response for testing without API"""
+    if "risk score" in prompt.lower():
+        risk_score = random.randint(3, 8)
+        return f"""
+        AI Automation Risk Score: {risk_score}/10
+
+        3-Month Upskilling Roadmap:
+
+        Month 1: Foundations
+        - Week 1: Learn basics of Python programming
+        - Week 2: Introduction to data structures and algorithms
+        - Week 3: Git and version control
+        - Week 4: Project: Build a simple automation tool
+
+        Month 2: Core Skills
+        - Week 1: Database fundamentals (SQL)
+        - Week 2: Web development basics (HTML, CSS, JavaScript)
+        - Week 3: Introduction to cloud services
+        - Week 4: Project: Deploy a web application
+
+        Month 3: Advanced Topics
+        - Week 1: Introduction to machine learning
+        - Week 2: API development and integration
+        - Week 3: Security best practices
+        - Week 4: Final project: Build and deploy a full-stack application
+        """
+    elif "job title" in prompt.lower() and "skills" in prompt.lower():
+        return f"""
+        Job Title: Full Stack Developer
+        Skills: JavaScript, React, Node.js, Python, SQL, Cloud Services
+        """
+    elif "improvements" in prompt.lower():
+        return """
+        Resume Improvement Suggestions:
+        1. Add more quantifiable achievements with metrics
+        2. Highlight relevant technical skills more prominently
+        3. Include links to portfolio or GitHub projects
+        4. Use more action verbs in your descriptions
+        5. Tailor your resume more specifically to the target role
+        """
+    else:
+        return """
+        To build a career in this field, focus on these key areas:
+        1. Master the core technical skills
+        2. Build practical projects for your portfolio
+        3. Contribute to open-source projects
+        4. Network with industry professionals
+        5. Stay updated with the latest trends and technologies
+        """
+
+def generate_gemini_content(prompt):
+    """Generate content using Gemini API"""
+    if use_mock_data:
+        return get_mock_llm_response(prompt)
+    
+    try:
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            generation_config=genai.types.GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            )
+        )
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        st.error(f"Gemini content generation error: {str(e)}")
+        return get_mock_llm_response(prompt)
+
+def generate_openai_content(prompt):
+    """Generate content using OpenAI API"""
+    if use_mock_data:
+        return get_mock_llm_response(prompt)
+    
+    try:
+        response = openai.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": "You are a helpful career coach assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"OpenAI content generation error: {str(e)}")
+        return get_mock_llm_response(prompt)
+
+def generate_content(prompt):
+    """Generate content based on selected API"""
+    if api_choice == "Google Gemini":
+        return generate_gemini_content(prompt)
+    else:
+        return generate_openai_content(prompt)
+
 def extract_job_info_with_llm(job_description):
     try:
-        st.info("Extracting job information with Gemini...")
+        st.info("Extracting job information...")
         
         prompt = f"""
         Extract the job title and key skills from the job description below.
@@ -111,15 +278,7 @@ def extract_job_info_with_llm(job_description):
         {job_description}
         """
         
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.2,
-                max_output_tokens=max_tokens,
-            )
-        )
-        
-        response = model.generate_content(prompt).text
+        response = generate_content(prompt)
         st.success("Successfully extracted job information")
         
         # Extract job title and skills using regex
@@ -165,14 +324,14 @@ resume_text = extract_text_from_resume(uploaded_file)
 resume_summary = resume_text[:600]
 st.subheader("📝 Resume Extracted Text (Preview)")
 st.text_area("Extracted Resume Text", resume_summary, height=300)
-resume_embedding = get_gemini_embedding(resume_summary)
+resume_embedding = get_text_embedding(resume_summary)
 
 # --- MODE 1: SYSTEM RECOMMENDATIONS ---
 if mode == "Mode 1: System Recommendations":
     st.markdown("### 🔍 System Analyzing Your Resume Against Predefined Roles")
     
     if "job_embedding" not in df_jobs.columns:
-        df_jobs["job_embedding"] = df_jobs["job_title"].apply(get_gemini_embedding)
+        df_jobs["job_embedding"] = df_jobs["job_title"].apply(get_text_embedding)
 
     df_jobs["similarity"] = df_jobs["job_embedding"].apply(lambda x: cosine_similarity(resume_embedding, x))
     best_match = df_jobs.sort_values(by="similarity", ascending=False).iloc[0]
@@ -237,7 +396,7 @@ else:
             with st.spinner(f"Processing job {i+1}/{len(job_list)}..."):
                 try:
                     job_info = extract_job_info_with_llm(job_desc)
-                    job_info["job_embedding"] = get_gemini_embedding(job_desc)
+                    job_info["job_embedding"] = get_text_embedding(job_desc)
                     job_info["similarity"] = cosine_similarity(resume_embedding, job_info["job_embedding"])
                     custom_jobs.append(job_info)
                     progress_bar.progress((i + 1) / len(job_list))
@@ -313,19 +472,10 @@ Key Recommended Skills:
 {resilient_skills}
 """
 
-st.info("Generating career analysis with Gemini...")
-
-model = genai.GenerativeModel(
-    model_name=model_name,
-    generation_config=genai.types.GenerationConfig(
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-    )
-)
+st.info(f"Generating career analysis with {api_choice}...")
 
 try:
-    response = model.generate_content(prompt)
-    roadmap_output = response.text
+    roadmap_output = generate_content(prompt)
     st.success("Career analysis complete!")
 except Exception as e:
     st.error(f"Error generating roadmap: {str(e)}")
@@ -358,7 +508,7 @@ except Exception as e:
     st.error(f"Error displaying skill chart: {str(e)}")
 
 st.markdown("### 🧠 3-Month AI Roadmap")
-st.text_area("Gemini Output:", value=roadmap_output, height=300)
+st.text_area("AI Output:", value=roadmap_output, height=300)
 
 if st.button("🗕️ Download Career Report"):
     try:
@@ -386,7 +536,7 @@ You are a professional resume advisor. Suggest improvements for the following re
 
 {resume_summary}
 """
-        improvements = model.generate_content(improve_prompt).text
+        improvements = generate_content(improve_prompt)
         st.markdown("### ✨ Suggested Improvements")
         st.markdown(improvements)
     except Exception as e:
@@ -405,7 +555,7 @@ user_query = st.text_input("Ask a career question:", value=selected_q if selecte
 if user_query:
     try:
         tutor_prompt = f"You are a career tutor. Respond in {language}. Answer this question in under 150 words: '{user_query}'"
-        tutor_response = model.generate_content(tutor_prompt).text
+        tutor_response = generate_content(tutor_prompt)
         st.markdown(f"<div style='background-color:#1e1e1e;padding:10px;border-radius:10px'><b>💡 Career Bot:</b> {tutor_response}</div>", unsafe_allow_html=True)
     except Exception as e:
         st.error(f"Error getting career advice: {str(e)}")
