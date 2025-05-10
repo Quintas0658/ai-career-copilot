@@ -17,6 +17,9 @@ st.markdown("Welcome to your personalized AI career assistant. Upload your resum
 # --- SIDEBAR ---
 st.sidebar.title("⚙️ Config")
 
+# 添加调试模式选项
+debug_mode = st.sidebar.checkbox("Debug Mode", value=False)
+
 # API选择
 api_choice = st.sidebar.radio(
     "AI Provider:",
@@ -305,38 +308,79 @@ def extract_job_info_with_llm(job_description):
     try:
         st.info("Extracting job information...")
         
+        # 改进提示词，使其更明确地指导如何提取信息
         prompt = f"""
-        Extract the job title and key skills from the job description below.
+        Extract the EXACT job title and key skills from the job description below.
+        Pay close attention to the actual job title mentioned in the description, not just keywords.
+        For financial, management, or non-technical roles, be sure to identify them correctly.
+        
         Format your response EXACTLY as follows:
-        Job Title: [extracted job title]
-        Skills: [comma-separated list of key skills]
+        Job Title: [extracted job title, e.g. Finance Manager, Software Engineer, etc.]
+        Skills: [comma-separated list of 5-8 key skills required for this role]
 
         Job Description:
         {job_description}
         """
         
+        # 在界面上显示原始描述的开头(用于调试)
+        if debug_mode:
+            st.write("Description excerpt:", job_description[:200] + "...")
+        
         response = generate_content(prompt)
+        
+        # 调试输出
+        if debug_mode:
+            st.write("Raw API response:", response)
+        
         st.success("Successfully extracted job information")
         
-        # Extract job title and skills using regex
-        job_title_match = re.search(r"Job Title:\s*(.*?)(?:\n|$)", response)
-        skills_match = re.search(r"Skills:\s*(.*?)(?:\n|$)", response)
+        # 提高正则表达式的鲁棒性
+        job_title_match = re.search(r"Job Title:\s*(.*?)(?:\n|$)", response, re.IGNORECASE)
+        skills_match = re.search(r"Skills:\s*(.*?)(?:\n|$)", response, re.IGNORECASE)
         
-        job_title = job_title_match.group(1) if job_title_match else "Unknown Position"
-        skills_text = skills_match.group(1) if skills_match else ""
-        skills = [skill.strip() for skill in skills_text.split(",")]
+        job_title = job_title_match.group(1).strip() if job_title_match else "Unknown Position"
+        skills_text = skills_match.group(1).strip() if skills_match else ""
+        skills = [skill.strip() for skill in skills_text.split(",") if skill.strip()]
         
-        return {
+        # 确保至少有一些技能
+        if not skills:
+            if "finance" in job_description.lower() or "financial" in job_description.lower():
+                skills = ["Financial Analysis", "Forecasting", "Budgeting", "Data Analysis", "Excel"]
+            elif "manager" in job_description.lower() or "management" in job_description.lower():
+                skills = ["Leadership", "Strategic Planning", "Team Management", "Communication", "Project Management"]
+            else:
+                skills = ["Communication", "Problem Solving", "Analytical Skills", "Attention to Detail", "Teamwork"]
+        
+        # 创建结果字典
+        result = {
             "job_title": job_title,
             "resilient_skills": ", ".join(skills)
         }
+        
+        # 调试输出最终结果
+        if debug_mode:
+            st.write("Extracted job info:", result)
+            
+        return result
     except Exception as e:
         st.error(f"Error extracting job info: {str(e)}")
-        # Return a default job in case of error
-        return {
-            "job_title": "Error Processing Job",
-            "resilient_skills": "Error, AI, Processing"
-        }
+        # 根据职位描述关键词返回更合理的默认职位
+        description_lower = job_description.lower()
+        if "finance" in description_lower or "financial" in description_lower:
+            return {
+                "job_title": "Finance Manager",
+                "resilient_skills": "Financial Analysis, Forecasting, Budgeting, Data Analysis, Excel"
+            }
+        elif "manager" in description_lower or "management" in description_lower:
+            return {
+                "job_title": "Business Manager",
+                "resilient_skills": "Leadership, Strategic Planning, Team Management, Communication, Project Management"
+            }
+        else:
+            return {
+                "job_title": "Unknown Position",
+                "resilient_skills": "Communication, Problem Solving, Analytical Skills, Attention to Detail, Teamwork"
+            }
 
 # --- SAMPLE JOB DATA ---
 df_jobs = pd.DataFrame([
