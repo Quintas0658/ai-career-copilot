@@ -208,12 +208,12 @@ def plot_skill_gap_chart(user_skills, target_skills):
 def get_mock_llm_response(prompt_text):
     """Generate mock LLM response for testing without API"""
     prompt_lower = prompt_text.lower()
-    job_title_for_mock = "General Professional" # 更中性的默认职位
-    skills_for_mock = "Communication, Organization, Problem Solving, MS Office Suite" # 更中性的默认技能
+    job_title_for_mock = "General Professional"
+    skills_for_mock = "Communication, Organization, Problem Solving, MS Office Suite"
 
-    # 尝试从提示中提取职位名称和技能，以便模拟数据更相关
-    # 修正正则表达式以匹配括号中的可选文本
     title_match = re.search(r"Matched Job Role(?:\s*\(.*?\))?:\s*(.*?)(?:\n|$)", prompt_text, re.IGNORECASE)
+    if not title_match: # Try another pattern if the main one fails (e.g. for resume improvements prompt)
+        title_match = re.search(r"targeting the role of ([^\n]+)", prompt_text, re.IGNORECASE)
     if title_match:
         job_title_for_mock = title_match.group(1).strip()
     
@@ -221,14 +221,11 @@ def get_mock_llm_response(prompt_text):
     if skills_match:
         skills_for_mock = skills_match.group(1).strip()
 
-    if "risk score" in prompt_lower and "roadmap" in prompt_lower: # 这是生成路线图和风险评分的提示
-        risk_score = random.randint(2, 6) # 协调员岗位的风险通常不会太高
-        
+    if "risk score" in prompt_lower and "roadmap" in prompt_lower: 
+        risk_score = random.randint(2, 6) 
         month1_theme, week1_goal, week2_goal, week3_goal, week4_project = "", "", "", "", ""
         month2_theme, week1_m2, week2_m2, week3_m2, week4_project_m2 = "", "", "", "", ""
         month3_theme, week1_m3, week2_m3, week3_m3, capstone_project_m3 = "", "", "", "", ""
-
-        # 根据职位关键词调整模拟路线图内容
         job_title_lower = job_title_for_mock.lower()
 
         if "finance manager" in job_title_lower:
@@ -281,7 +278,7 @@ def get_mock_llm_response(prompt_text):
             week2_m3 = "Time management and prioritization for handling multiple requisitions. Basics of SharePoint or similar for document management."
             week3_m3 = "Problem-solving common recruiting challenges (e.g., last-minute cancellations, unresponsive candidates/managers)."
             capstone_project_m3 = "Capstone: Develop a proposal to improve scheduling efficiency or candidate experience by 10% for the RC team, with actionable steps."
-        else: # 默认的通用专业/行政路线图
+        else: 
             skills_list = [s.strip() for s in skills_for_mock.split(',') if s.strip()]
             month1_theme = "Foundations in Core Professional Skills"
             week1_goal = f"Effective Communication: Written and verbal. (Focus: {skills_list[0] if skills_list else 'Communication'})"
@@ -321,7 +318,7 @@ Month 3: {month3_theme}
 - Week 3: {week3_m3}
 - Week 4: {capstone_project_m3}
 """
-    elif "job title" in prompt_lower and "skills" in prompt_lower: # 职位提取的模拟响应
+    elif "job title" in prompt_lower and "skills" in prompt_lower: 
         job_title_lower = job_title_for_mock.lower()
         if "finance manager" in job_title_lower:
              return "Job Title: Finance Manager\nSkills: Financial Analysis, Forecasting, Budgeting, Excel, Financial Modeling, Reporting, Communication"
@@ -330,18 +327,29 @@ Month 3: {month3_theme}
         return f"""Job Title: {job_title_for_mock}
 Skills: {skills_for_mock}
 """
-    elif "improvements" in prompt_lower: # 简历改进的模拟响应
-        return """Resume Improvement Suggestions (Mock):
-        1. Quantify achievements using metrics for the role of {job_title_for_mock}.
-        2. Tailor the skills section to precisely match requirements for {job_title_for_mock}.
-        3. Add a strong summary statement focused on {job_title_for_mock}.
-        """
-    else: # 通用聊天机器人的模拟响应
+    elif "improvements" in prompt_lower:
+        job_title_lower = job_title_for_mock.lower()
+        improvement_suggestions = [
+            f"1. Quantify your achievements with specific numbers and metrics relevant to a {job_title_for_mock} role.",
+            f"2. Tailor your skills section to precisely match the requirements typically found in {job_title_for_mock} job descriptions. Highlight transferable skills.",
+            f"3. Write a compelling summary or objective statement at the top of your resume, clearly stating your career goal as a {job_title_for_mock} and your key qualifications.",
+            "4. Use action verbs to start your bullet points (e.g., Managed, Coordinated, Developed, Implemented).",
+            f"5. Ensure your resume is ATS-friendly by using standard fonts, clear section headings, and relevant keywords for a {job_title_for_mock}."
+        ]
+        if "finance manager" in job_title_lower:
+            improvement_suggestions.append("6. Highlight experience with financial modeling, forecasting, budgeting software, and any specific financial regulations you are familiar with.")
+        elif "recruiting coordinator" in job_title_lower:
+            improvement_suggestions.append("6. Emphasize your organizational skills, experience with scheduling tools (Outlook, Google Calendar), and any familiarity with Applicant Tracking Systems (ATS). Mention specific examples of managing complex schedules or improving candidate experience.")
+        elif "data scientist" in job_title_lower or "data analyst" in job_title_lower:
+            improvement_suggestions.append("6. Showcase your portfolio of data projects (e.g., on GitHub), and list your proficiency in specific programming languages (Python, R, SQL) and data visualization tools (Tableau, Power BI).")
+        
+        return "Resume Improvement Suggestions (Mock):\n" + "\n".join(improvement_suggestions)
+    else: 
         return f"""Mock Answer for {job_title_for_mock}:
         To build a career as a {job_title_for_mock}, focus on these key areas:
-        1. Master the core technical skills: {skills_for_mock}.
-        2. Build practical projects for your portfolio.
-        3. Network with industry professionals.
+        1. Master the core relevant skills: {skills_for_mock}.
+        2. Build practical projects or gain experience relevant to the role.
+        3. Network with industry professionals in the {job_title_for_mock} field.
         """
 
 def generate_gemini_content(prompt):
@@ -369,18 +377,6 @@ def generate_openai_content(prompt):
         return get_mock_llm_response(prompt)
     
     try:
-        # 对于某些关键功能，如果是职位识别，直接解析内容
-        if "Extract the EXACT job title" in prompt:
-            job_description = prompt.split("Job Description:", 1)[1].strip()
-            # 直接从文本中提取职位
-            if "finance manager" in job_description.lower():
-                return "Job Title: Finance Manager\nSkills: Financial Analysis, Forecasting, Financial Modeling, Excel, Communication, Strategic Planning, Data Analysis, Business Acumen"
-            elif "data scientist" in job_description.lower():
-                return "Job Title: Data Scientist\nSkills: Python, R, Machine Learning, SQL, Statistics, Data Visualization, Big Data, Predictive Modeling"
-            # 继续添加其他常见职位
-            # 如果无法匹配，回退到mock响应
-        
-        # 尝试使用OpenAI API，但可能会失败
         response = openai.chat.completions.create(
             model=model_name,
             messages=[
@@ -391,28 +387,23 @@ def generate_openai_content(prompt):
             max_tokens=max_tokens
         )
         
-        # 处理可能的不同响应格式
         if hasattr(response, 'choices'):
-            # 标准OpenAI响应
             return response.choices[0].message.content
         elif isinstance(response, dict) and 'choices' in response:
-            # 返回的是字典
             return response['choices'][0]['message']['content']
         elif isinstance(response, str):
-            # 如果是字符串，可能是JSON字符串
             try:
                 import json
                 data = json.loads(response)
                 return data['choices'][0]['message']['content']
             except Exception as json_error:
-                st.error(f"Unable to parse OpenAI response as JSON: {str(json_error)}")
-                # 回退到模拟响应
+                st.error(f"OpenAI API Error: Unable to parse response as JSON. The response was: '{response[:100]}...'. Error: {str(json_error)}")
                 return get_mock_llm_response(prompt)
         else:
-            st.error(f"Unexpected OpenAI response format: {type(response)}")
+            st.error(f"OpenAI API Error: Unexpected response format: {type(response)}. Response: '{str(response)[:100]}...'")
             return get_mock_llm_response(prompt)
     except Exception as e:
-        st.error(f"OpenAI content generation error: {str(e)}")
+        st.error(f"OpenAI API Error: General content generation error: {str(e)}")
         return get_mock_llm_response(prompt)
 
 def generate_content(prompt):
