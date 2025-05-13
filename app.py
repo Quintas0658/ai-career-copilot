@@ -8,6 +8,7 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import openai
 import random
+import requests  # 添加requests库导入
 
 # --- CONFIG ---
 st.set_page_config(page_title="AI Career Copilot", layout="wide")
@@ -371,8 +372,65 @@ def generate_gemini_content(prompt):
         st.error(f"Gemini content generation error: {str(e)}")
         return get_mock_llm_response(prompt)
 
+def generate_openai_content_direct(prompt):
+    """使用requests直接调用OpenAI API，绕过SDK，模拟Postman的请求方式"""
+    if use_mock_data:
+        return get_mock_llm_response(prompt)
+    
+    try:
+        # 构建与Postman完全相同的请求
+        url = f"{custom_base_url}/v1/chat/completions"
+        
+        if debug_mode:
+            st.write(f"Direct API call to URL: {url}")
+            st.write(f"API Key (first 5 chars): {OPENAI_API_KEY[:5]}...")
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_API_KEY}"
+        }
+        
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": "You are a helpful career coach assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        # 发送HTTP请求，与Postman行为一致
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
+        # 检查HTTP状态码
+        if response.status_code == 200:
+            # 成功获取响应
+            if debug_mode:
+                st.success("Direct API call successful!")
+                
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        else:
+            # API返回错误
+            error_msg = f"API Error ({response.status_code}): {response.text[:100]}..."
+            if debug_mode:
+                st.error(error_msg)
+            else:
+                st.error("API Error. Enable debug mode for details.")
+            
+            return get_mock_llm_response(prompt)
+    except Exception as e:
+        st.error(f"Direct request error: {str(e)}")
+        return get_mock_llm_response(prompt)
+
 def generate_openai_content(prompt):
     """Generate content using OpenAI API"""
+    # 直接调用新的直接请求函数，绕过SDK
+    return generate_openai_content_direct(prompt)
+    
+    # 下面是原始的SDK实现，保留但注释掉，以防需要切换回来
+    """
     if use_mock_data:
         return get_mock_llm_response(prompt)
     
@@ -387,6 +445,7 @@ def generate_openai_content(prompt):
             max_tokens=max_tokens
         )
         
+        # 处理可能的不同响应格式
         if hasattr(response, 'choices'):
             return response.choices[0].message.content
         elif isinstance(response, dict) and 'choices' in response:
@@ -405,6 +464,7 @@ def generate_openai_content(prompt):
     except Exception as e:
         st.error(f"OpenAI API Error: General content generation error: {str(e)}")
         return get_mock_llm_response(prompt)
+    """
 
 def generate_content(prompt):
     """Generate content based on selected API"""
