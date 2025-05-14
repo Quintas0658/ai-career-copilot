@@ -1,8 +1,8 @@
 streamlit
-google-generativeai
-fpdf
+fpdf2
 PyMuPDF
+openai
+google-generativeai
 matplotlib
 pandas
 numpy
-openai>=1.0.0

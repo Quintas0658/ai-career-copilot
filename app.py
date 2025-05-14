@@ -46,7 +46,7 @@ else:
 
 temperature = st.sidebar.slider("Creativity (temperature)", 0.0, 1.0, 0.7)
 max_tokens = st.sidebar.slider("Max Output Tokens", 100, 2048, 800)
-language = st.sidebar.selectbox("🌐 Language", ["English", "Hindi", "Spanish", "French"])
+language = st.sidebar.selectbox("🌐 Language", ["English", "Chinese", "Hindi", "Spanish", "French"])
 
 uploaded_file = st.sidebar.file_uploader("📁 Upload Resume", type=["pdf"])
 
@@ -86,6 +86,13 @@ except Exception as e:
 def extract_text_from_resume(uploaded_file):
     with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
         return "".join([page.get_text() for page in doc])
+
+def is_chinese_text(text):
+    """检测文本是否主要为中文"""
+    # 统计中文字符的数量
+    chinese_chars = re.findall(r'[\u4e00-\u9fff]', text)
+    # 如果文本中有超过20%的中文字符，认为是中文文本
+    return len(chinese_chars) > 0.2 * len(text.strip())
 
 def get_mock_embedding():
     """Generate mock embedding for testing without API"""
@@ -165,20 +172,69 @@ def cosine_similarity(a, b):
     return np.dot(a, b) / norm_product
 
 def generate_pdf_report(name, role, skills, score, roadmap):
+    # 使用FPDF2代替FPDF，更好地支持中文字符
+    try:
+        from fpdf import FPDF
+        fpdf_version = 2  # 假设使用FPDF2
+    except ImportError:
+        st.warning("FPDF2 not available. Please run 'pip install fpdf2' for better CJK support.")
+        from fpdf import FPDF
+        fpdf_version = 1
+        
     pdf = FPDF()
+    
+    # 添加中文支持
+    if language == "Chinese":
+        try:
+            if fpdf_version >= 2:
+                # FPDF2支持中文的方式
+                pdf.add_font('fireflysung', '', '')  # 使用FPDF2内置的中文字体
+                pdf.set_font('fireflysung', size=12)
+            else:
+                # 尝试添加中文支持 - 使用内置ArialUnicode如果可用
+                pdf.add_font('ArialUnicode', '', '', uni=True)
+                pdf.set_font('ArialUnicode', size=12)
+        except Exception as e:
+            # 如果找不到中文字体，使用标准字体并显示警告
+            st.warning(f"中文字体不可用: {str(e)}。尝试使用标准字体。")
+            pdf.set_font("Arial", size=12)
+    else:
+        # 非中文语言使用标准Arial字体
+        pdf.set_font("Arial", size=12)
+        
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.set_title("AI Career Report")
+    
+    # 设置标题
+    if language == "Chinese":
+        report_title = "AI职业发展报告"
+        matched_role = "匹配职位"
+        skills_label = "推荐技能"
+        risk_score_label = "AI自动化风险评分"
+        roadmap_label = "AI生成的3个月提升计划"
+    else:
+        report_title = "AI Career Report"
+        matched_role = "Matched Role"
+        skills_label = "Recommended Skills"
+        risk_score_label = "AI Automation Risk Score"
+        roadmap_label = "AI-Generated 3-Month Roadmap"
+    
+    pdf.set_title(report_title)
 
-    pdf.multi_cell(0, 10, f"AI Career Report for {name}")
+    # 移除可能导致编码问题的表情符号
+    name = re.sub(r'[^\x00-\x7F\u4e00-\u9fff]+', '', name)  # 保留ASCII和中文字符
+    role = re.sub(r'[^\x00-\x7F\u4e00-\u9fff]+', '', role)
+    skills = re.sub(r'[^\x00-\x7F\u4e00-\u9fff]+', '', skills)
+    roadmap = re.sub(r'[^\x00-\x7F\u4e00-\u9fff]+', '', roadmap)
+
+    pdf.multi_cell(0, 10, f"{report_title} - {name}")
     pdf.ln()
 
-    pdf.cell(0, 10, f"Matched Role: {role}", ln=True)
-    pdf.cell(0, 10, f"Recommended Skills: {skills}", ln=True)
-    pdf.cell(0, 10, f"AI Automation Risk Score: {score}/10", ln=True)
+    pdf.cell(0, 10, f"{matched_role}: {role}", ln=True)
+    pdf.cell(0, 10, f"{skills_label}: {skills}", ln=True)
+    pdf.cell(0, 10, f"{risk_score_label}: {score}/10", ln=True)
 
     pdf.ln(10)
-    pdf.multi_cell(0, 10, "AI-Generated 3-Month Roadmap:")
+    pdf.multi_cell(0, 10, roadmap_label)
     pdf.multi_cell(0, 10, roadmap)
 
     output_path = "Career_Report.pdf"
@@ -483,53 +539,110 @@ def extract_job_info_with_llm(job_description, force_direct_parsing_flag):
         description_lower = job_description.lower()
         extracted_title = None
         extracted_skills_list = []
-
-        role_patterns = [
-            ("recruiting coordinator", "Recruiting Coordinator", ["Scheduling", "Communication", "ATS", "Organization", "MS Outlook", "MS Excel", "Candidate Experience", "Time Management"]),
-            (("hr coordinator", "human resources coordinator"), "Human Resources Coordinator", ["HR Administration", "Onboarding", "Employee Records", "Communication", "ATS", "MS Office", "Scheduling", "Problem Solving"]),
-            ("talent acquisition coordinator", "Talent Acquisition Coordinator", ["Sourcing Support", "Candidate Engagement", "ATS Management", "Scheduling", "Reporting", "Communication", "Organization"]),
-            (("finance manager", "financial manager"), "Finance Manager", ["Financial Analysis", "Forecasting", "Budgeting", "Excel", "Financial Modeling", "Reporting", "Communication", "Business Acumen"]),
-            (("data scientist",), "Data Scientist", ["Python", "R", "Machine Learning", "SQL", "Statistics", "Data Visualization", "Big Data", "Predictive Modeling"]),
-            (("data analyst",), "Data Analyst", ["SQL", "Excel", "Tableau", "Power BI", "Data Cleaning", "Data Visualization", "Statistics", "Communication"]),
-            (("software engineer", "software developer"), "Software Engineer", ["Python", "Java", "JavaScript", "Git", "SQL", "APIs", "Problem Solving", "Data Structures"])
-        ]
-
-        for keywords, title, skills in role_patterns:
-            if isinstance(keywords, tuple):
-                if any(kw in description_lower for kw in keywords):
+        
+        # 检测是否为中文职位描述
+        is_chinese_jd = is_chinese_text(job_description)
+        
+        if is_chinese_jd:
+            # 中文JD模式下的关键词对应表
+            chinese_role_patterns = [
+                (("招聘专员", "招聘人员", "招聘助理", "人才招聘专员"), "Recruiting Coordinator", ["排期", "沟通", "招聘系统", "组织能力", "办公软件", "候选人体验", "时间管理"]),
+                (("人力资源专员", "人事专员", "HR专员"), "Human Resources Coordinator", ["HR管理", "入职流程", "员工档案", "沟通能力", "招聘系统", "办公软件", "日程安排"]),
+                (("财务经理", "财务主管", "财会经理"), "Finance Manager", ["财务分析", "预算", "财务建模", "Excel", "报表", "沟通能力", "商业敏感度"]),
+                (("数据科学家",), "Data Scientist", ["Python", "R", "机器学习", "SQL", "统计分析", "数据可视化", "大数据", "预测建模"]),
+                (("数据分析师",), "Data Analyst", ["SQL", "Excel", "Tableau", "Power BI", "数据清洗", "数据可视化", "统计", "沟通能力"]),
+                (("软件工程师", "软件开发", "程序员"), "Software Engineer", ["Python", "Java", "JavaScript", "Git", "SQL", "API", "问题解决", "数据结构"])
+            ]
+            
+            # 使用中文匹配模式
+            for keywords, title, skills in chinese_role_patterns:
+                if isinstance(keywords, tuple):
+                    if any(kw in description_lower for kw in keywords):
+                        extracted_title = title
+                        extracted_skills_list = skills
+                        break
+                elif keywords in description_lower:
                     extracted_title = title
                     extracted_skills_list = skills
                     break
-            elif keywords in description_lower:
-                extracted_title = title
-                extracted_skills_list = skills
-                break
-        
-        if debug_mode and extracted_title:
-            st.success(f"Direct keyword match successful. Title: {extracted_title}, Skills: {extracted_skills_list}")
+                    
+            # 中文职位名称的正则表达式
+            if not extracted_title:
+                chinese_title_patterns = [
+                    r'职位[:：]\s*([\w\s]+)',
+                    r'岗位[:：]\s*([\w\s]+)',
+                    r'招聘[:：]\s*([\w\s]+)',
+                    r'招聘([\w\s]{2,8})(?:岗位|人员|专员)',
+                ]
+                for pattern in chinese_title_patterns:
+                    match = re.search(pattern, description_lower)
+                    if match:
+                        potential_title = match.group(1).strip()
+                        if len(potential_title) >= 2 and len(potential_title) <= 10:
+                            extracted_title = potential_title
+                            # 将中文职位名转换为英文对应
+                            if "招聘" in potential_title or "人才" in potential_title:
+                                extracted_title = "Recruiting Coordinator"
+                            elif "人力资源" in potential_title or "人事" in potential_title:
+                                extracted_title = "HR Coordinator"
+                            elif "财务" in potential_title or "会计" in potential_title:
+                                extracted_title = "Finance Manager"
+                            elif "数据" in potential_title and ("科学" in potential_title or "挖掘" in potential_title):
+                                extracted_title = "Data Scientist"
+                            elif "数据" in potential_title and "分析" in potential_title:
+                                extracted_title = "Data Analyst"
+                            elif "软件" in potential_title or "开发" in potential_title or "程序" in potential_title:
+                                extracted_title = "Software Engineer"
+                            break
 
-        if not extracted_title:
-            generic_title_patterns = [
-                r'seeking a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
-                r'hiring a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
-                r'is (?:looking|searching) for a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
-                r'job title:?\s*([\w\s(]+?)(?:\n|,|\[)',
-                r'role:?\s*([\w\s(]+?)(?:\n|,|\[)', 
-                r'position:?\s*([\w\s(]+?)(?:\n|,|\[)'
+        # 如果不是中文JD或中文JD未提取出信息，使用原有英文处理逻辑
+        if not is_chinese_jd or not extracted_title:
+            role_patterns = [
+                ("recruiting coordinator", "Recruiting Coordinator", ["Scheduling", "Communication", "ATS", "Organization", "MS Outlook", "MS Excel", "Candidate Experience", "Time Management"]),
+                (("hr coordinator", "human resources coordinator"), "Human Resources Coordinator", ["HR Administration", "Onboarding", "Employee Records", "Communication", "ATS", "MS Office", "Scheduling", "Problem Solving"]),
+                ("talent acquisition coordinator", "Talent Acquisition Coordinator", ["Sourcing Support", "Candidate Engagement", "ATS Management", "Scheduling", "Reporting", "Communication", "Organization"]),
+                (("finance manager", "financial manager"), "Finance Manager", ["Financial Analysis", "Forecasting", "Budgeting", "Excel", "Financial Modeling", "Reporting", "Communication", "Business Acumen"]),
+                (("data scientist",), "Data Scientist", ["Python", "R", "Machine Learning", "SQL", "Statistics", "Data Visualization", "Big Data", "Predictive Modeling"]),
+                (("data analyst",), "Data Analyst", ["SQL", "Excel", "Tableau", "Power BI", "Data Cleaning", "Data Visualization", "Statistics", "Communication"]),
+                (("software engineer", "software developer"), "Software Engineer", ["Python", "Java", "JavaScript", "Git", "SQL", "APIs", "Problem Solving", "Data Structures"])
             ]
-            for pattern in generic_title_patterns:
-                match = re.search(pattern, description_lower, re.IGNORECASE)
-                if match:
-                    potential_title = match.group(1).strip()
-                    potential_title = re.sub(r'\s*\(.*?\)$' ,'', potential_title).strip()
-                    potential_title = re.sub(r'\s+(to|with|for|as a|who|responsible for)$' ,'', potential_title, flags=re.IGNORECASE).strip()
-                    if 2 < len(potential_title.split()) < 6 and len(potential_title) < 50:
-                        extracted_title = potential_title.title()
-                        if debug_mode:
-                            st.info(f"Regex pattern matched. Potential Title: {extracted_title}")
-                        if not extracted_skills_list:
-                            extracted_skills_list = ["Communication", "Problem Solving", "Teamwork", "Organization", "Adaptability"]
+
+            for keywords, title, skills in role_patterns:
+                if isinstance(keywords, tuple):
+                    if any(kw in description_lower for kw in keywords):
+                        extracted_title = title
+                        extracted_skills_list = skills
                         break
+                elif keywords in description_lower:
+                    extracted_title = title
+                    extracted_skills_list = skills
+                    break
+            
+            if debug_mode and extracted_title:
+                st.success(f"Direct keyword match successful. Title: {extracted_title}, Skills: {extracted_skills_list}")
+
+            if not extracted_title:
+                generic_title_patterns = [
+                    r'seeking a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
+                    r'hiring a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
+                    r'is (?:looking|searching) for a(?:n)? ([\w\s]+?)(?:\sto|,|\swith|\[|,|\n)',
+                    r'job title:?\s*([\w\s(]+?)(?:\n|,|\[)',
+                    r'role:?\s*([\w\s(]+?)(?:\n|,|\[)', 
+                    r'position:?\s*([\w\s(]+?)(?:\n|,|\[)'
+                ]
+                for pattern in generic_title_patterns:
+                    match = re.search(pattern, description_lower, re.IGNORECASE)
+                    if match:
+                        potential_title = match.group(1).strip()
+                        potential_title = re.sub(r'\s*\(.*?\)$' ,'', potential_title).strip()
+                        potential_title = re.sub(r'\s+(to|with|for|as a|who|responsible for)$' ,'', potential_title, flags=re.IGNORECASE).strip()
+                        if 2 < len(potential_title.split()) < 6 and len(potential_title) < 50:
+                            extracted_title = potential_title.title()
+                            if debug_mode:
+                                st.info(f"Regex pattern matched. Potential Title: {extracted_title}")
+                            if not extracted_skills_list:
+                                extracted_skills_list = ["Communication", "Problem Solving", "Teamwork", "Organization", "Adaptability"]
+                            break
         
         if debug_mode and force_direct_parsing_flag:
              st.warning("Force direct parsing is ON. Skipping LLM call for job info extraction.")
@@ -548,18 +661,34 @@ def extract_job_info_with_llm(job_description, force_direct_parsing_flag):
                 st.info("Direct parsing failed or incomplete. Attempting LLM extraction...")
             elif debug_mode:
                  st.info("Proceeding with Gemini LLM extraction (or LLM if not forcing direct parse)...")
-            prompt_llm = f"""
-            Extract the EXACT job title and key skills from the job description below.
-            Pay close attention to the actual job title mentioned in the description, not just keywords.
-            For financial, management, or non-technical roles, be sure to identify them correctly.
-            
-            Format your response EXACTLY as follows:
-            Job Title: [extracted job title, e.g. Finance Manager, Recruiting Coordinator, Software Engineer, etc.]
-            Skills: [comma-separated list of 5-8 key skills required for this role. For 'Recruiting Coordinator', skills should include Scheduling, Communication, ATS, Organization, MS Outlook, MS Excel, Candidate Experience, Time Management.]
+                 
+            # 修改提示词以支持中英文职位描述
+            if is_chinese_jd:
+                prompt_llm = f"""
+                从以下职位描述中提取准确的职位名称和关键技能。
+                请特别注意描述中提及的实际职位名称，而不仅仅是关键词。
+                对于财务、管理或非技术类角色，请确保正确识别。
+                
+                请严格按照以下格式输出您的回答:
+                Job Title: [提取的职位名称，例如 Finance Manager, Recruiting Coordinator, Software Engineer 等]
+                Skills: [5-8个该职位所需的关键技能，以逗号分隔。若为"招聘专员/Recruiting Coordinator"，技能应包括排期能力、沟通能力、招聘系统使用、组织能力、办公软件、候选人体验、时间管理等]
 
-            Job Description:
-            {job_description}
-            """
+                职位描述:
+                {job_description}
+                """
+            else:
+                prompt_llm = f"""
+                Extract the EXACT job title and key skills from the job description below.
+                Pay close attention to the actual job title mentioned in the description, not just keywords.
+                For financial, management, or non-technical roles, be sure to identify them correctly.
+                
+                Format your response EXACTLY as follows:
+                Job Title: [extracted job title, e.g. Finance Manager, Recruiting Coordinator, Software Engineer, etc.]
+                Skills: [comma-separated list of 5-8 key skills required for this role. For 'Recruiting Coordinator', skills should include Scheduling, Communication, ATS, Organization, MS Outlook, MS Excel, Candidate Experience, Time Management.]
+
+                Job Description:
+                {job_description}
+                """
             
             if debug_mode:
                 st.write("LLM Prompt for job info extraction:", prompt_llm)
@@ -587,16 +716,29 @@ def extract_job_info_with_llm(job_description, force_direct_parsing_flag):
             extracted_title = "General Role"
             if debug_mode:
                 st.warning("All extraction methods failed for title. Using 'General Role'.")
+                
         if not extracted_skills_list:
             description_lower = job_description.lower()
-            if "finance" in description_lower or "financial" in description_lower:
-                extracted_skills_list = ["Financial Analysis", "Forecasting", "Budgeting", "Data Analysis", "Excel"]
-            elif "recruiting" in description_lower or "hr" in description_lower or "human resources" in description_lower:
-                 extracted_skills_list = ["Scheduling", "Communication", "ATS", "Organization", "MS Office", "Candidate Support"]
-            elif "manager" in description_lower or "management" in description_lower:
-                extracted_skills_list = ["Leadership", "Strategic Planning", "Team Management", "Communication", "Project Management"]
+            # 检测是否为中文职位描述
+            if is_chinese_jd:
+                if "财务" in description_lower or "会计" in description_lower:
+                    extracted_skills_list = ["财务分析", "预测", "预算", "数据分析", "Excel"]
+                elif "招聘" in description_lower or "人力资源" in description_lower or "人事" in description_lower:
+                    extracted_skills_list = ["排期", "沟通", "招聘系统", "组织能力", "办公软件", "候选人体验"]
+                elif "经理" in description_lower or "管理" in description_lower:
+                    extracted_skills_list = ["领导力", "战略规划", "团队管理", "沟通能力", "项目管理"]
+                else:
+                    extracted_skills_list = ["沟通能力", "问题解决", "分析能力", "细节关注", "团队合作"]
             else:
-                extracted_skills_list = ["Communication", "Problem Solving", "Analytical Skills", "Attention to Detail", "Teamwork"]
+                if "finance" in description_lower or "financial" in description_lower:
+                    extracted_skills_list = ["Financial Analysis", "Forecasting", "Budgeting", "Data Analysis", "Excel"]
+                elif "recruiting" in description_lower or "hr" in description_lower or "human resources" in description_lower:
+                     extracted_skills_list = ["Scheduling", "Communication", "ATS", "Organization", "MS Office", "Candidate Support"]
+                elif "manager" in description_lower or "management" in description_lower:
+                    extracted_skills_list = ["Leadership", "Strategic Planning", "Team Management", "Communication", "Project Management"]
+                else:
+                    extracted_skills_list = ["Communication", "Problem Solving", "Analytical Skills", "Attention to Detail", "Teamwork"]
+                    
             if debug_mode:
                 st.warning(f"Using fallback skills for '{extracted_title}': {extracted_skills_list}")
 
@@ -787,6 +929,7 @@ prompt = f"""
 You are an expert career coach and curriculum designer specializing in creating highly tailored professional development plans.
 Your task is to create a specific and actionable 3-month upskilling roadmap for a candidate aspiring to the "Matched Job Role" by intensely focusing on the "Key Recommended Skills" provided. Additionally, provide an AI automation risk score (1-10) for this role.
 
+{'' if language != 'Chinese' else '请使用中文回答。' }
 **Crucial Instructions for the Roadmap:**
 1.  **Role Specificity:** The roadmap MUST be *directly and exclusively* relevant to the "{job_title}". Avoid generic advice.
 2.  **Skill Integration:** Each weekly milestone must clearly contribute to learning or applying one or more of the "{resilient_skills}". Mention which skill(s) each week's activity targets.
@@ -796,6 +939,7 @@ Your task is to create a specific and actionable 3-month upskilling roadmap for 
 6.  **Consider Resume (Implicitly):** While the resume summary is provided for context on the candidate's background, the roadmap's primary goal is to build proficiency for the "{job_title}" using the "{resilient_skills}".
 
 **Output Format (Strict Adherence Required):**
+{'' if language != 'Chinese' else '请用中文书写以下内容：' }
 
 AI Automation Risk Score: [Score]/10
 
@@ -907,7 +1051,17 @@ if st.button("🗕️ Download Career Report"):
 
 if st.button("🔍 Suggest Resume Improvements"):
     try:
-        improve_prompt = f"""
+        # 根据语言选择确定提示词
+        if language == "Chinese":
+            improve_prompt = f"""
+你是一位专业的简历顾问。为以下简历内容提供改进建议，目标职位是 {job_title}:
+
+{resume_summary}
+
+请提供5-6条具体的改进建议，包括如何更好地展示技能、成就量化、格式优化等方面。
+"""
+        else:
+            improve_prompt = f"""
 You are a professional resume advisor. Suggest improvements for the following resume content targeting the role of {job_title}:
 
 {resume_summary}
@@ -921,13 +1075,22 @@ You are a professional resume advisor. Suggest improvements for the following re
 st.markdown("### 🤖 Career Chatbot (Tutor Mode)")
 
 # 定义一个默认的问题列表，在所有情况下至少显示这些
-default_questions = [
-    "How can I prepare for a career transition?",
-    "What skills should I prioritize developing next?",
-    "How can I showcase my existing skills more effectively?",
-    "What industry trends should I be aware of?",
-    "How can I leverage AI tools in my career development?"
-]
+if language == "Chinese":
+    default_questions = [
+        "如何准备职业转型？",
+        "我应该优先发展哪些技能？",
+        "如何更有效地展示我现有的技能？",
+        "我应该了解哪些行业趋势？",
+        "如何在职业发展中利用AI工具？"
+    ]
+else:
+    default_questions = [
+        "How can I prepare for a career transition?",
+        "What skills should I prioritize developing next?",
+        "How can I showcase my existing skills more effectively?",
+        "What industry trends should I be aware of?",
+        "How can I leverage AI tools in my career development?"
+    ]
 
 # 尝试生成针对性问题，但如果条件不满足则使用默认问题
 try:
@@ -936,19 +1099,34 @@ try:
     
     if has_context and len(job_title) > 0:
         # 根据简历和JD生成预设问题
-        questions_prompt = f"""
-        You are a career coach. Based on this person's resume and their target job role, 
-        generate 4 specific questions they might want to ask about their career transition.
-        Make questions specific to skills they need to develop for {job_title} and any gaps 
-        between their current skills and {resilient_skills}.
-        
-        Resume: {resume_summary}
-        Target Job: {job_title}
-        Required Skills: {resilient_skills}
-        
-        Format: Return ONLY a Python list of 4 strings like this:
-        ["Question 1?", "Question 2?", "Question 3?", "Question 4?"]
-        """
+        if language == "Chinese":
+            questions_prompt = f"""
+            你是一位职业教练。根据这个人的简历和他们的目标职位，
+            生成4个他们可能想问的关于职业转型的具体问题。
+            问题应该针对他们需要为{job_title}发展的技能，以及他们
+            当前技能与所需技能{resilient_skills}之间的差距。
+            
+            简历: {resume_summary}
+            目标职位: {job_title}
+            所需技能: {resilient_skills}
+            
+            格式: 仅返回一个包含4个字符串的Python列表，如下所示:
+            ["问题1？", "问题2？", "问题3？", "问题4？"]
+            """
+        else:
+            questions_prompt = f"""
+            You are a career coach. Based on this person's resume and their target job role, 
+            generate 4 specific questions they might want to ask about their career transition.
+            Make questions specific to skills they need to develop for {job_title} and any gaps 
+            between their current skills and {resilient_skills}.
+            
+            Resume: {resume_summary}
+            Target Job: {job_title}
+            Required Skills: {resilient_skills}
+            
+            Format: Return ONLY a Python list of 4 strings like this:
+            ["Question 1?", "Question 2?", "Question 3?", "Question 4?"]
+            """
         questions_response = generate_content(questions_prompt)
         
         # 解析返回的问题列表字符串为实际列表
