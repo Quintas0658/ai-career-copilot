@@ -242,6 +242,15 @@ def generate_pdf_report(name, role, skills, score, roadmap):
     return output_path
 
 def plot_skill_gap_chart(user_skills, target_skills):
+    # 配置中文字体支持
+    if language == "Chinese":
+        try:
+            # 添加对matplotlib中文字体的支持
+            plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'sans-serif']
+            plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+        except Exception as e:
+            st.warning(f"配置中文字体时出错: {str(e)}")
+
     skills = list(set(target_skills + user_skills))
     user_scores = [1 if skill in user_skills else 0.3 for skill in skills]
     target_scores = [1 for _ in skills]
@@ -252,12 +261,27 @@ def plot_skill_gap_chart(user_skills, target_skills):
     angles += angles[:1]
 
     fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
-    ax.plot(angles, target_scores, label="Target", linewidth=2)
-    ax.plot(angles, user_scores, label="You", linestyle='dashed', linewidth=2)
+    
+    # 设置本地化标签
+    if language == "Chinese":
+        target_label = "目标"
+        you_label = "你"
+        chart_title = "技能差距雷达图"
+    else:
+        target_label = "Target"
+        you_label = "You"
+        chart_title = "Skill Gap Radar"
+    
+    # 绘制线条和填充
+    ax.plot(angles, target_scores, label=target_label, linewidth=2)
+    ax.plot(angles, user_scores, label=you_label, linestyle='dashed', linewidth=2)
     ax.fill(angles, user_scores, alpha=0.25)
+    
+    # 设置标签和标题
     ax.set_thetagrids(np.degrees(angles[:-1]), skills)
-    ax.set_title("Skill Gap Radar")
+    ax.set_title(chart_title)
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
+    
     plt.tight_layout()
     plt.savefig("skill_radar_chart.png")
     plt.close()
