@@ -6,6 +6,8 @@ import pandas as pd
 import re
 from fpdf import FPDF
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import os
 import openai
 import random
 import requests  # 添加requests库导入
@@ -242,15 +244,107 @@ def generate_pdf_report(name, role, skills, score, roadmap):
     return output_path
 
 def plot_skill_gap_chart(user_skills, target_skills):
+    # 技能翻译字典
+    skill_translations = {
+        "Python": "Python",
+        "R": "R",
+        "Git": "Git",
+        "SQL": "SQL",
+        "Data Analysis": "数据分析",
+        "Data Visualization": "数据可视化",
+        "Machine Learning": "机器学习",
+        "Communication": "沟通能力",
+        "Leadership": "领导力",
+        "Project Management": "项目管理",
+        "Problem Solving": "解决问题",
+        "Teamwork": "团队合作",
+        "Financial Analysis": "财务分析",
+        "Budgeting": "预算管理",
+        "Forecasting": "预测",
+        "Excel": "Excel",
+        "Financial Modeling": "财务建模",
+        "Scheduling": "日程管理",
+        "Organization": "组织能力",
+        "Time Management": "时间管理",
+        "API Design": "API设计",
+        "APIs": "API接口",
+        "Data Cleaning": "数据清洗",
+        "Statistics": "统计分析",
+        "Big Data": "大数据",
+        "Predictive Modeling": "预测建模",
+        "Cloud": "云计算",
+        "Docker": "Docker容器",
+        "Java": "Java",
+        "JavaScript": "JavaScript",
+        "Reporting": "报表制作",
+        "Data Structures": "数据结构",
+        "Networking": "网络",
+        "Linux": "Linux",
+        "Bash": "Bash脚本",
+        "Threat Modeling": "威胁建模",
+        "Tableau": "Tableau",
+        "Power BI": "Power BI",
+        "Microsoft Office": "微软Office",
+        "MS Office": "微软Office",
+        "Adaptability": "适应能力"
+    }
+    
     # 配置中文字体支持
     if language == "Chinese":
-        try:
-            # 添加对matplotlib中文字体的支持
+        # 检查是否在Mac系统上，尝试使用系统字体
+        system_fonts = []
+        if os.path.exists('/System/Library/Fonts'):
+            # macOS系统字体路径
+            macos_fonts = [
+                '/System/Library/Fonts/PingFang.ttc',
+                '/Library/Fonts/Arial Unicode.ttf',
+                '/System/Library/Fonts/STHeiti Light.ttc',
+                '/System/Library/Fonts/STHeiti Medium.ttc'
+            ]
+            # 检查这些字体是否存在
+            for font_path in macos_fonts:
+                if os.path.exists(font_path):
+                    system_fonts.append(font_path)
+                    break
+        
+        # 尝试设置中文字体
+        chinese_font_prop = None
+        if system_fonts:
+            try:
+                chinese_font_path = system_fonts[0]
+                chinese_font_prop = fm.FontProperties(fname=chinese_font_path)
+                plt.rcParams['font.family'] = 'sans-serif'
+                plt.rcParams['font.sans-serif'] = [fm.FontProperties(fname=chinese_font_path).get_name()] + ['Arial Unicode MS', 'SimHei', 'Microsoft YaHei']
+            except Exception as e:
+                st.warning(f"加载系统中文字体时出错: {str(e)}，将使用备选字体")
+                chinese_font_prop = None
+        
+        if not chinese_font_prop:
+            # 使用matplotlib配置的方式
             plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'sans-serif']
-            plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-        except Exception as e:
-            st.warning(f"配置中文字体时出错: {str(e)}")
+        
+        plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+        
+        # 在中文模式下，翻译技能名称
+        translated_user_skills = []
+        translated_target_skills = []
+        
+        for skill in user_skills:
+            if skill in skill_translations and language == "Chinese":
+                translated_user_skills.append(skill_translations[skill])
+            else:
+                translated_user_skills.append(skill)
+                
+        for skill in target_skills:
+            if skill in skill_translations and language == "Chinese":
+                translated_target_skills.append(skill_translations[skill])
+            else:
+                translated_target_skills.append(skill)
+                
+        user_skills = translated_user_skills
+        target_skills = translated_target_skills
 
+    # 准备雷达图数据
     skills = list(set(target_skills + user_skills))
     user_scores = [1 if skill in user_skills else 0.3 for skill in skills]
     target_scores = [1 for _ in skills]
@@ -260,6 +354,7 @@ def plot_skill_gap_chart(user_skills, target_skills):
     target_scores += target_scores[:1]
     angles += angles[:1]
 
+    # 创建图表
     fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
     
     # 设置本地化标签
@@ -1015,6 +1110,7 @@ if debug_mode:
     st.write(f"Job Title for Analysis: {job_title}")
     st.write(f"Resilient Skills String (to become target_skills): {resilient_skills}")
 
+# 英文技能列表
 known_skills = [
     "Python", "Java", "C++", "JavaScript", "SQL", "Git", "Linux", "Networking", "Bash",
     "Tableau", "Excel", "Power BI", "Burp Suite", "Nmap", "Wireshark", "Prompt Engineering",
@@ -1027,6 +1123,23 @@ known_skills = [
     "R", "Machine Learning", "Statistics", "Data Visualization", "Big Data", "Predictive Modeling",
     "Data Cleaning", "Teamwork", "Adaptability"
 ]
+
+# 如果是中文模式，添加中文技能名称进行匹配
+if language == "Chinese":
+    chinese_known_skills = [
+        "Python", "Java", "C++", "JavaScript", "SQL", "Git", "Linux", "网络", "Bash",
+        "Tableau", "Excel", "Power BI", "渗透测试", "Nmap", "Wireshark", "提示词工程",
+        "API接口", "云计算", "Docker", "Kubernetes", "道德黑客", 
+        "沟通能力", "管理", "财务分析", "报表制作", "数据分析", 
+        "项目管理", "解决问题", "组织能力", "日程安排", "招聘系统", 
+        "候选人体验", "时间管理", "人力资源管理", "入职流程", "员工档案",
+        "人才搜寻", "候选人参与", "招聘系统管理", 
+        "预测", "预算管理", "财务建模", "商业敏感度", 
+        "R", "机器学习", "统计分析", "数据可视化", "大数据", "预测建模",
+        "数据清洗", "团队合作", "适应能力"
+    ]
+    known_skills.extend(chinese_known_skills)
+
 user_skills = [skill for skill in known_skills if skill.lower() in resume_text.lower()]
 target_skills = [s.strip() for s in resilient_skills.split(",") if s.strip()]
 
