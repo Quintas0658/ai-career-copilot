@@ -970,8 +970,24 @@ except Exception as e:
     # 出错时使用默认问题
     example_qs = default_questions
 
-selected_q = st.selectbox("Need inspiration?", ["-- Select --"] + example_qs)
-user_query = st.text_input("Ask a career question:", value=selected_q if selected_q != "-- Select --" else "")
+# 初始化session_state以存储所选问题
+if 'selected_question' not in st.session_state:
+    st.session_state.selected_question = ""
+
+def update_question():
+    """当选择问题时更新session_state"""
+    if st.session_state.inspiration_dropdown != "-- Select --":
+        st.session_state.selected_question = st.session_state.inspiration_dropdown
+
+# 使用callback来处理选择变化
+selected_q = st.selectbox(
+    "Need inspiration?", 
+    ["-- Select --"] + example_qs,
+    key="inspiration_dropdown",
+    on_change=update_question
+)
+# 使用session_state中存储的问题作为输入框的默认值
+user_query = st.text_input("Ask a career question:", value=st.session_state.selected_question)
 
 if user_query:
     try:
