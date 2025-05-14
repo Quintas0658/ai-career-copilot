@@ -919,19 +919,3 @@ You are a professional resume advisor. Suggest improvements for the following re
         st.error(f"Error generating resume improvements: {str(e)}")
 
 st.markdown("### 🤖 Career Chatbot (Tutor Mode)")
-example_qs = [
-    "How can I learn Python for cybersecurity?",
-    "What are good certifications for a data analyst?",
-    "What should I master to become a cloud engineer?",
-    "What's a good roadmap for AI in software engineering?"
-]
-selected_q = st.selectbox("Need inspiration?", ["-- Select --"] + example_qs)
-user_query = st.text_input("Ask a career question:", value=selected_q if selected_q != "-- Select --" else "")
-
-if user_query:
-    try:
-        tutor_prompt = f"You are a career tutor. Respond in {language}. Answer this question in under 150 words: '{user_query}'"
-        tutor_response = generate_content(tutor_prompt)
-        st.markdown(f"<div style='background-color:#1e1e1e;padding:10px;border-radius:10px'><b>💡 Career Bot:</b> {tutor_response}</div>", unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"Error getting career advice: {str(e)}")
