@@ -173,12 +173,12 @@ def generate_pdf_report(name, role, skills, score, roadmap):
     pdf.multi_cell(0, 10, f"AI Career Report for {name}")
     pdf.ln()
 
-    pdf.cell(0, 10, f"🧑 Matched Role: {role}", ln=True)
-    pdf.cell(0, 10, f"🎯 Recommended Skills: {skills}", ln=True)
-    pdf.cell(0, 10, f"⚠️ AI Automation Risk Score: {score}/10", ln=True)
+    pdf.cell(0, 10, f"Matched Role: {role}", ln=True)
+    pdf.cell(0, 10, f"Recommended Skills: {skills}", ln=True)
+    pdf.cell(0, 10, f"AI Automation Risk Score: {score}/10", ln=True)
 
     pdf.ln(10)
-    pdf.multi_cell(0, 10, "🧠 AI-Generated 3-Month Roadmap:")
+    pdf.multi_cell(0, 10, "AI-Generated 3-Month Roadmap:")
     pdf.multi_cell(0, 10, roadmap)
 
     output_path = "Career_Report.pdf"
@@ -875,7 +875,7 @@ except Exception as e:
 st.subheader("🌟 Job Analysis Results")
 st.markdown(f"**Target Role:** {job_title}")
 st.markdown(f"**Recommended Skills:** {resilient_skills}")
-st.markdown(f"**⚠️ AI Automation Risk Score:** {risk_score}/10")
+st.markdown(f"**AI Automation Risk Score:** {risk_score}/10")
 
 try:
     st.markdown("### 📈 Skill Gap Radar")
@@ -919,3 +919,64 @@ You are a professional resume advisor. Suggest improvements for the following re
         st.error(f"Error generating resume improvements: {str(e)}")
 
 st.markdown("### 🤖 Career Chatbot (Tutor Mode)")
+
+# 定义一个默认的问题列表，在所有情况下至少显示这些
+default_questions = [
+    "How can I prepare for a career transition?",
+    "What skills should I prioritize developing next?",
+    "How can I showcase my existing skills more effectively?",
+    "What industry trends should I be aware of?",
+    "How can I leverage AI tools in my career development?"
+]
+
+# 尝试生成针对性问题，但如果条件不满足则使用默认问题
+try:
+    # 检查是否有需要的上下文信息来生成个性化问题
+    has_context = 'job_title' in locals() and 'resilient_skills' in locals() and 'resume_summary' in locals()
+    
+    if has_context and len(job_title) > 0:
+        # 根据简历和JD生成预设问题
+        questions_prompt = f"""
+        You are a career coach. Based on this person's resume and their target job role, 
+        generate 4 specific questions they might want to ask about their career transition.
+        Make questions specific to skills they need to develop for {job_title} and any gaps 
+        between their current skills and {resilient_skills}.
+        
+        Resume: {resume_summary}
+        Target Job: {job_title}
+        Required Skills: {resilient_skills}
+        
+        Format: Return ONLY a Python list of 4 strings like this:
+        ["Question 1?", "Question 2?", "Question 3?", "Question 4?"]
+        """
+        questions_response = generate_content(questions_prompt)
+        
+        # 解析返回的问题列表字符串为实际列表
+        import ast
+        try:
+            generated_qs = ast.literal_eval(questions_response)
+            # 确保格式正确
+            if isinstance(generated_qs, list) and len(generated_qs) > 0:
+                example_qs = generated_qs
+            else:
+                example_qs = default_questions
+        except:
+            # 解析失败时使用默认问题
+            example_qs = default_questions
+    else:
+        # 没有上下文时使用默认问题
+        example_qs = default_questions
+except Exception as e:
+    # 出错时使用默认问题
+    example_qs = default_questions
+
+selected_q = st.selectbox("Need inspiration?", ["-- Select --"] + example_qs)
+user_query = st.text_input("Ask a career question:", value=selected_q if selected_q != "-- Select --" else "")
+
+if user_query:
+    try:
+        tutor_prompt = f"You are a career tutor. Respond in {language}. Answer this question in under 150 words: '{user_query}'"
+        tutor_response = generate_content(tutor_prompt)
+        st.markdown(f"<div style='background-color:#1e1e1e;padding:10px;border-radius:10px'><b>💡 Career Bot:</b> {tutor_response}</div>", unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"Error getting career advice: {str(e)}")
